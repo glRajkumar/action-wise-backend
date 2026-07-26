@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project: Action Wise
+
+This repo is the current stand-in for the future `apps/api` in the "Action Wise" monorepo (full product spec: `../.claude/handover.md`, cross-repo notes: `../.claude/CLAUDE.md`). Action Wise is a backend knowledge base/execution layer — Resources, Actions, Flows, Runs, Registry, Workspaces — none of which exist here yet. This repo is only the Phase 1 **Foundation + Auth** slice (handover sections A/B), built before the monorepo restructure happened.
+
+Stack already matches the target spec: Hono, Postgres+Drizzle, TypeScript strict, Zod. **Gaps vs. the spec to know about before extending:**
+- No `packages/shared` — schemas aren't shared with the frontend; each repo defines its own.
+- Auth is email/password only — handover also calls for GitHub OAuth (not implemented).
+- No Workspace concept, no `owner|admin|editor|viewer` roles, no `can(user, action, subject)` permission helper, no per-user `connection_secrets` table, no auto-created personal workspace on signup — all spec'd, none built.
+- No Vitest — no test runner configured at all currently.
+
+Where handover conventions and the global CLAUDE.md coding rules disagree, global wins for code-writing patterns (see `../.claude/CLAUDE.md` → Global conventions). Concretely here: implement the handover's "single `AppError` type, consistent JSON error envelope" as `{ message: string }`, matching the existing global response convention — don't invent a new envelope shape.
+
 ## State of repo
 
 Auth-focused Hono backend built on `better-auth`, Drizzle (Postgres/Neon), and Redis. Not a bare skeleton anymore — email/password auth, email verification, password reset, and account deletion are wired end-to-end. There are no custom routes/controllers beyond auth; new features should follow the layered structure in the global CLAUDE.md (routes → controllers → services) once they're added.
