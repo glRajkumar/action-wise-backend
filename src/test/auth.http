@@ -1,0 +1,96 @@
+@host = http://localhost:8000/api/auth
+@origin= http://localhost:3000
+
+
+### signup
+POST {{host}}/sign-up/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "raj@gmail.com",
+  "password": "12345678",
+  "name": "Raj"
+}
+
+
+### signin
+POST {{host}}/sign-in/email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "raj@gmail.com",
+  "password": "12345678"
+}
+
+
+### send verify email
+POST {{host}}/send-verification-email
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "raj@gmail.com"
+}
+
+
+### verify email
+GET {{host}}/verify-email?token=eyJhbGciOiJIUzI1NiJ9
+Content-Type: application/json
+Origin: {{origin}}
+
+
+### forgot pass
+POST {{host}}/request-password-reset
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "raj@gmail.com"
+}
+
+
+### Reset pass
+POST {{host}}/reset-password
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "newPassword": "password1234",
+  "token": "le5IWnG01qT2JHTpw20fpofr"
+}
+
+
+### change password
+POST {{host}}/change-password
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "newPassword": "ujhygggggggrdu",
+  "currentPassword": "password1234"
+}
+
+
+### send delete user email
+POST {{host}}/delete-user
+Content-Type: application/json
+Origin: {{origin}}
+
+{}
+
+
+### delete user
+GET {{host}}/delete-user/callback?token=5vnau5mpjo0wglw29a5zpwpq36cz00ob
+Content-Type: application/json
+Origin: {{origin}}
+
+
+### logout
+POST {{host}}/sign-out
+Content-Type: application/json
+Origin: {{origin}}
+
+{}
+
