@@ -1,0 +1,101 @@
+@host = http://localhost:8000/api
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_ID
+@connectionId = REPLACE_WITH_HTTP_CONNECTION_ID
+
+# Sign in first (see auth.http). Create an http connection first (see
+# connections.http) if you want auth-inherited execution.
+
+
+### create a board
+POST {{host}}/workspaces/{{workspaceId}}/playground/boards
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Scratch"
+}
+
+
+### list my boards
+GET {{host}}/workspaces/{{workspaceId}}/playground/boards
+Origin: {{origin}}
+
+
+### create an ad-hoc http tile (not saved to the registry yet)
+@boardId = REPLACE_WITH_BOARD_ID
+POST {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}/tiles
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "adhocConfig": {
+    "kind": "http",
+    "connectionId": "{{connectionId}}",
+    "address": "/get",
+    "config": { "method": "GET", "bodyType": "none" }
+  },
+  "layout": { "x": 0, "y": 0, "w": 4, "h": 3 },
+  "renderMode": "json_tree"
+}
+
+
+### list tiles on a board
+GET {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}/tiles
+Origin: {{origin}}
+
+
+### reposition a tile
+@tileId = REPLACE_WITH_TILE_ID
+PATCH {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "layout": { "x": 4, "y": 0, "w": 4, "h": 3 }
+}
+
+
+### execute the tile's http request (server-proxied, records a Run)
+POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/execute
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "variables": {}
+}
+
+
+### record a Run for a tile whose Firebase read/write already ran client-side
+POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/runs
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "request": { "path": "/users/123", "mode": "read_once" },
+  "response": { "name": "Ada" },
+  "status": "success",
+  "durationMs": 42
+}
+
+
+### save the tile to the registry (requires adhocConfig.connectionId to be set)
+POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/promote
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Get Example",
+  "direction": "invoke",
+  "danger": "safe"
+}
+
+
+### delete tile
+DELETE {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}
+Origin: {{origin}}
+
+
+### delete board
+DELETE {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}
+Origin: {{origin}}

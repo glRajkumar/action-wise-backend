@@ -9,6 +9,11 @@ import { Hono } from 'hono'
 import { requireAuth } from './middlewares/auth'
 import { auth } from './lib/auth'
 import { env } from './utils/env'
+import { AppError } from './utils/errors'
+import { workspacesRouter } from './routes/workspaces'
+import { connectionsRouter } from './routes/connections'
+import { resourcesRouter } from './routes/resources'
+import { playgroundRouter } from './routes/playground'
 
 const app = new Hono().basePath("/api")
 
@@ -23,6 +28,11 @@ app.on(["GET", "POST"], "/auth/*", c => auth.handler(c.req.raw))
 
 app.use(requireAuth)
 
+app.route('/workspaces', workspacesRouter)
+app.route('/workspaces', connectionsRouter)
+app.route('/workspaces', resourcesRouter)
+app.route('/workspaces', playgroundRouter)
+
 app.get('/', (c) => {
   return c.text('Hello Hono!')
 })
@@ -31,8 +41,9 @@ app.notFound(c => c.json({ message: 'Route not found' }, 404))
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse()
-  console.log(err)
-  return c.json({ message: err?.message || "Internal sever eror" }, 500)
+  if (err instanceof AppError) return c.json({ message: err.message }, err.status)
+  console.error(err)
+  return c.json({ message: "Internal server error" }, 500)
 })
 
 serve({ fetch: app.fetch, port: Number(env.PORT || 8000) }, (req) => {

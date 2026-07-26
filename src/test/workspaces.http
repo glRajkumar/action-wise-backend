@@ -1,0 +1,91 @@
+@host = http://localhost:8000/api
+@origin = http://localhost:3000
+
+# Sign in first (see auth.http) — REST Client keeps the session cookie for
+# subsequent requests in this file.
+
+
+### list my workspaces (includes the auto-created personal one)
+GET {{host}}/workspaces
+Origin: {{origin}}
+
+
+### create a workspace
+POST {{host}}/workspaces
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Team Workspace"
+}
+
+
+### get one workspace
+@workspaceId = REPLACE_WITH_WORKSPACE_ID
+GET {{host}}/workspaces/{{workspaceId}}
+Origin: {{origin}}
+
+
+### rename workspace
+PATCH {{host}}/workspaces/{{workspaceId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Renamed Workspace"
+}
+
+
+### list members
+GET {{host}}/workspaces/{{workspaceId}}/members
+Origin: {{origin}}
+
+
+### change a member's role
+@memberUserId = REPLACE_WITH_USER_ID
+PATCH {{host}}/workspaces/{{workspaceId}}/members/{{memberUserId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "role": "editor"
+}
+
+
+### remove a member
+DELETE {{host}}/workspaces/{{workspaceId}}/members/{{memberUserId}}
+Origin: {{origin}}
+
+
+### list pending invites
+GET {{host}}/workspaces/{{workspaceId}}/invites
+Origin: {{origin}}
+
+
+### invite a teammate
+POST {{host}}/workspaces/{{workspaceId}}/invites
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "email": "teammate@example.com",
+  "role": "editor"
+}
+
+
+### revoke an invite
+@inviteId = REPLACE_WITH_INVITE_ID
+DELETE {{host}}/workspaces/{{workspaceId}}/invites/{{inviteId}}
+Origin: {{origin}}
+
+
+### accept an invite (sign in as the invited user first — token is logged to
+### the backend console by the stub invite-email sender)
+@inviteToken = REPLACE_WITH_TOKEN_FROM_CONSOLE
+POST {{host}}/workspaces/invites/{{inviteToken}}/accept
+Origin: {{origin}}
+
+
+### delete workspace
+DELETE {{host}}/workspaces/{{workspaceId}}
+Origin: {{origin}}

@@ -18,4 +18,8 @@ export const env = {
 
   PORT: requiredEnv('PORT'),
 
+  // Base64-encoded 32-byte AES-256 key for connection_secrets. Generate with:
+  // node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  CONNECTION_SECRET_KEY: requiredEnv('CONNECTION_SECRET_KEY'),
+
 } as const

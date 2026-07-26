@@ -1,0 +1,103 @@
+@host = http://localhost:8000/api
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_ID
+@connectionId = REPLACE_WITH_HTTP_CONNECTION_ID
+
+# Sign in first (see auth.http). Create a connection first (see connections.http) —
+# a resource can't exist without one.
+
+
+### create a folder
+POST {{host}}/workspaces/{{workspaceId}}/resource-folders
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Checkout"
+}
+
+
+### list folders
+GET {{host}}/workspaces/{{workspaceId}}/resource-folders
+Origin: {{origin}}
+
+
+### create an http resource
+@folderId = REPLACE_WITH_FOLDER_ID
+POST {{host}}/workspaces/{{workspaceId}}/resources
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "kind": "http",
+  "name": "Create Order",
+  "folderId": "{{folderId}}",
+  "connectionId": "{{connectionId}}",
+  "direction": "invoke",
+  "danger": "mutating",
+  "address": "/orders",
+  "config": {
+    "method": "POST",
+    "bodyType": "json"
+  },
+  "payloadTemplate": {
+    "sku": "PLACEHOLDER-SKU",
+    "quantity": 1
+  }
+}
+
+
+### list resources (optionally filter by folder)
+GET {{host}}/workspaces/{{workspaceId}}/resources?folderId={{folderId}}
+Origin: {{origin}}
+
+
+### get one resource
+@resourceId = REPLACE_WITH_RESOURCE_ID
+GET {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+Origin: {{origin}}
+
+
+### update resource (kind must stay the same as on creation)
+PATCH {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "kind": "http",
+  "name": "Create Order (v2)",
+  "connectionId": "{{connectionId}}",
+  "direction": "invoke",
+  "danger": "mutating",
+  "address": "/v2/orders",
+  "config": {
+    "method": "POST",
+    "bodyType": "json"
+  }
+}
+
+
+### export a TypeScript type from this resource's recorded runs (needs at
+### least one successful run — execute the tile in playground.http first)
+GET {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}/export-type
+Origin: {{origin}}
+
+
+### generate fake data matching the inferred shape
+POST {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}/fake-data
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "count": 5
+}
+
+
+### delete resource
+DELETE {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+Origin: {{origin}}
+
+
+### delete folder
+DELETE {{host}}/workspaces/{{workspaceId}}/resource-folders/{{folderId}}
+Origin: {{origin}}

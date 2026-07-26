@@ -7,6 +7,7 @@ import * as schema from '../db/schema/auth'
 import { connectDB, db } from "./db"
 
 import { hashPassword, verifyPassword } from "../utils/password"
+import { createWorkspaceWithOwner } from "../services/workspaces"
 import { env } from '../utils/env'
 
 import {
@@ -91,6 +92,14 @@ export const auth = betterAuth({
 
         if (user != null) {
           await welcomeEmail(user)
+        }
+
+        // Only the real newSession carries a persisted user id (the fallback
+        // above is name/email only, used when email verification blocks
+        // session creation) — a workspace needs a real FK target.
+        const newUser = ctx.context.newSession?.user
+        if (newUser != null) {
+          await createWorkspaceWithOwner(`${newUser.name}'s Workspace`, newUser.id)
         }
       }
     }),

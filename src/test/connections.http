@@ -1,0 +1,80 @@
+@host = http://localhost:8000/api
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_ID
+
+# Sign in first (see auth.http).
+
+
+### list connections (includes hasSecret for the current user)
+GET {{host}}/workspaces/{{workspaceId}}/connections
+Origin: {{origin}}
+
+
+### create an http connection
+POST {{host}}/workspaces/{{workspaceId}}/connections
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "kind": "http",
+  "name": "Staging API",
+  "config": {
+    "baseUrl": "https://staging.example.com",
+    "defaultHeaders": { "X-Client": "action-wise" },
+    "auth": { "type": "bearer" }
+  }
+}
+
+
+### create a firebase connection
+POST {{host}}/workspaces/{{workspaceId}}/connections
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "kind": "firebase",
+  "name": "Staging Firebase",
+  "config": {
+    "projectId": "my-project",
+    "apiKey": "AIzaSy-example",
+    "databaseURL": "https://my-project.firebaseio.com"
+  }
+}
+
+
+### get one connection
+@connectionId = REPLACE_WITH_CONNECTION_ID
+GET {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+Origin: {{origin}}
+
+
+### update connection
+PATCH {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "kind": "http",
+  "name": "Staging API (renamed)",
+  "config": { "baseUrl": "https://staging.example.com", "auth": { "type": "bearer" } }
+}
+
+
+### set my secret for this connection (e.g. an API key or bearer token)
+PUT {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}/secret
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "value": "super-secret-token"
+}
+
+
+### remove my secret
+DELETE {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}/secret
+Origin: {{origin}}
+
+
+### delete connection
+DELETE {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+Origin: {{origin}}
