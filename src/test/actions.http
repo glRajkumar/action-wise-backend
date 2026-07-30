@@ -1,0 +1,135 @@
+@host = http://localhost:8000/api
+@origin = http://localhost:3000
+@workspaceId = REPLACE_WITH_WORKSPACE_ID
+@resourceId = REPLACE_WITH_HTTP_RESOURCE_ID
+
+# Sign in first (see auth.http). Create an http connection + resource first
+# (see connections.http / resources.http) — steps must reference http
+# resources in this workspace.
+
+
+### list actions
+GET {{host}}/workspaces/{{workspaceId}}/actions
+Origin: {{origin}}
+
+
+### create an action
+POST {{host}}/workspaces/{{workspaceId}}/actions
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Create post and verify",
+  "description": "Chains a create against a follow-up read"
+}
+
+
+### get action with steps
+@actionId = REPLACE_WITH_ACTION_ID
+GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+Origin: {{origin}}
+
+
+### rename action
+PATCH {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "name": "Create post and verify it"
+}
+
+
+### add step 1 — no mapping
+POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "resourceId": "{{resourceId}}",
+  "name": "list_users"
+}
+
+
+### add step 2 — references step 1's response
+POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "resourceId": "{{resourceId}}",
+  "name": "create_post",
+  "inputMapping": {
+    "title": "Post by {{steps.list_users.response.body.0.name}}"
+  }
+}
+
+
+### update a step's mapping
+@stepId = REPLACE_WITH_STEP_ID
+PATCH {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/{{stepId}}
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "inputMapping": {
+    "postId": "{{steps.create_post.response.body.id}}"
+  }
+}
+
+
+### reorder steps (must list every step id exactly once)
+PUT {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/reorder
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "stepIds": ["REPLACE_STEP_ID_1", "REPLACE_STEP_ID_2"]
+}
+
+
+### delete a step
+DELETE {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/{{stepId}}
+Origin: {{origin}}
+
+
+### execute — sequential, per-step run rows, stops on first failure
+POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/execute
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "variables": {}
+}
+
+
+### list runs of this action
+GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/runs?limit=10
+Origin: {{origin}}
+
+
+### get one run's timeline (per-step runs, ordered)
+@actionRunId = REPLACE_WITH_ACTION_RUN_ID
+GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/runs/{{actionRunId}}
+Origin: {{origin}}
+
+
+### workspace-wide run history (section D/E consumer)
+GET {{host}}/workspaces/{{workspaceId}}/runs?limit=20
+Origin: {{origin}}
+
+
+### negative: firebase resource as a step (expect 400)
+POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+Content-Type: application/json
+Origin: {{origin}}
+
+{
+  "resourceId": "REPLACE_WITH_FIREBASE_RESOURCE_ID",
+  "name": "bad_step"
+}
+
+
+### delete action
+DELETE {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+Origin: {{origin}}

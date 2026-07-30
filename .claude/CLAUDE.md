@@ -10,7 +10,7 @@ Stack already matches the target spec: Hono, Postgres+Drizzle, TypeScript strict
 - No `packages/shared`, and there won't be one — Zod schemas are NOT shared with `frontent/`. Define request/response schemas here in `src/validations/`; when the frontend needs the matching shape, its schema is hand-written/synced separately, not imported. No compile-time guarantee they match — flag it when a schema changes shape.
 - Auth is email/password only — handover also calls for GitHub OAuth (not implemented).
 - `src/db/schema/` has the full Phase 1 domain model (`workspaces.ts`, `connections.ts`, `resources.ts`, `playground.ts`, `actions.ts`, `runs.ts`, `flow.ts` — barrel at `schema/index.ts`), migrated (`drizzle/0000_lazy_cable.sql`).
-- **Sections B, C, D's backend half, E, and F are built; G and D's frontend (grid board, ring buffer) are not.** Workspace CRUD/members/invites, `can()`, Connection/Resource CRUD, Playground boards/tiles/execution/promote, TS type export, and fake data generation all exist (see Architecture below). Actions (section G) has schema only — no routes/controllers yet.
+- **All Phase 1 backend sections (B–G) are built** (2026-07-30). Workspace CRUD/members/invites, `can()`, Connection/Resource CRUD, Playground boards/tiles/execution/promote, TS type export, fake data generation, Actions (CRUD + steps + sequential executor + `{{steps.*}}` resolver), and a workspace-level run-history endpoint all exist (see Architecture below).
 - No Vitest — no test runner configured at all currently.
 - **New required env var**: `CONNECTION_SECRET_KEY` (base64, must decode to exactly 32 bytes) — the app throws at import time without it, same eager-validation pattern as the other env vars. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` and add it to your own `.env` (not committed, not read by any tooling here).
 
@@ -18,7 +18,7 @@ Where handover conventions and the global CLAUDE.md coding rules disagree, globa
 
 ## State of repo
 
-Auth-focused Hono backend built on `better-auth`, Drizzle (Postgres/Neon), and Redis. Not a bare skeleton anymore — email/password auth, email verification, password reset, and account deletion are wired end-to-end. There are no custom routes/controllers beyond auth; new features should follow the layered structure in the global CLAUDE.md (routes → controllers → services) once they're added.
+Hono backend built on `better-auth`, Drizzle (Postgres/Neon), and Redis, with the full Phase 1 domain surface (workspaces, connections, resources, playground, beautify/faker, actions, runs) mounted under `/api/workspaces`. **DB caveat (2026-07-30):** the Neon database behind `DATABASE_URL` is currently shared with a legacy app (finance/social tables) — see `../DECISIONS.md`. The legacy `connections` table collides with ours and must be renamed (`src/db/fix-collision.tmp.ts`) before the migration fully applies (`src/db/apply-migration.tmp.ts`); both `.tmp.ts` helpers are disposable once the user moves to a dedicated database.
 
 ## Commands
 
@@ -26,7 +26,7 @@ Auth-focused Hono backend built on `better-auth`, Drizzle (Postgres/Neon), and R
 - `pnpm build` — tsc compile to dist/
 - `pnpm start` — node dist/index.js (run compiled build)
 - `pnpm db:generate` / `pnpm db:push` — generate/apply migrations from `src/db/schema` (config in `drizzle.config.ts`, output to `./drizzle`)
-- `pnpm db:seed` — runs `src/db/seed.ts`; currently just a DB-reachability check, no domain rows yet (personal-workspace-on-signup will be the first real seed consumer)
+- `pnpm db:seed` — runs `src/db/seed.ts`; seeds a full "Demo Workspace" (connections, folders, resources, runs, playground board/tiles, a 3-step action with a completed run) onto the user from `SEED_EMAIL` (falls back to first user). Idempotent-ish: skips if that user already has a "Demo Workspace"; delete it to re-seed.
 
 No test runner or lint config. Manual API testing via `src/test/auth.http` (VS Code REST Client) — covers sign-up, sign-in, verify-email, forgot/reset password, change password, delete-user, sign-out.
 
@@ -37,7 +37,7 @@ No test runner or lint config. Manual API testing via `src/test/auth.http` (VS C
 - Redis (`src/lib/connect-redis.ts`) is wired in as `secondaryStorage` for get/set/delete — used for session/rate-limit state, not a general cache.
 - Password hashing uses `@node-rs/argon2` via `hashPassword`/`verifyPassword` in `src/utils/password.ts`, passed into `emailAndPassword.password`.
 - Email hooks (`sendResetPassword`, `sendVerificationEmail`, `sendDeleteAccountVerification`) come from `src/templates/emails/*` and are passed directly into the betterAuth config, not called manually.
-- A welcome email fires from an `after` hook (`createAuthMiddleware`) that matches on `ctx.path.startsWith('/sign-up')` — this is the only custom auth hook.
+- One custom `after` hook (`createAuthMiddleware`) with two branches: `/sign-up` (welcome email + personal workspace when a session exists) and `/sign-in` (`ensurePersonalWorkspace` backfill for users whose email-verification-gated signup couldn't create one — only fires at zero memberships). Both branches are try/catch-wrapped so a failure never fails the auth request.
 - `connectRedis()` is awaited at module load time in `src/lib/auth.ts`; if it throws, the process exits(1) immediately. Redis must be reachable for the app to boot.
 
 **Routing (`src/index.ts`)**: all routes are mounted on `basePath("/api")`. `/api/auth/*` is handled directly inline (`c => auth.handler(c.req.raw)`) — `requireAuth` middleware is registered globally with `app.use(requireAuth)` but placed *after* the auth routes, so it does not gate them; it applies to everything mounted below it. `requireAuth` (`src/middlewares/auth.ts`) calls `auth.api.getSession` and sets `userId` on context (typed via `AppEnv` in `src/types/hono.ts`).
@@ -51,7 +51,7 @@ No test runner or lint config. Manual API testing via `src/test/auth.http` (VS C
 - `src/utils/permissions.ts` — `can(userId, action, subject)` (handover's literal ask) plus the lower-level `getWorkspaceRole`/`roleHasPermission` it's built from. `ROLE_PERMISSIONS` is the *only* place role→action mapping lives; extending for per-resource overrides later means editing this map, not call sites.
 - `src/middlewares/workspace-access.ts` — `requireWorkspaceAccess(action)`, applied per-route. Always re-derives membership from the DB against the session's `userId`, never trusts the `:workspaceId` path param. 404 for non-members, 403 for members with the wrong role — see `../DECISIONS.md` for why that split exists.
 - `src/services/invite-email.ts` — `InviteEmailSender` interface, `inviteEmailSender` is the console-logging stub instance per the handover's explicit ask. Swap the instance to add real sending later.
-- Personal workspace on signup is wired into the *existing* `after` hook in `src/lib/auth.ts` (the one that already sends the welcome email) — it calls `createWorkspaceWithOwner` from `services/workspaces.ts` when `ctx.context.newSession?.user` is present. Don't add a second signup hook; extend that one.
+- Personal workspace on signup is wired into the *existing* `after` hook in `src/lib/auth.ts` (the one that already sends the welcome email) — `createWorkspaceWithOwner` when `ctx.context.newSession?.user` is present, plus the sign-in `ensurePersonalWorkspace` backfill branch (see Auth section above / `../DECISIONS.md` 2026-07-30). Don't add a second hook; extend that one. `listMembers` inner-joins `users` and returns `name`/`email` per member.
 - `src/test/workspaces.http` — manual test file for all of the above, same REST Client pattern as `auth.http`.
 
 **Connections & Registry (handover section C)**, mounted at `/api/workspaces/:workspaceId/connections` and `/api/workspaces/:workspaceId/resources` + `/resource-folders` (`src/routes/connections.ts`, `src/routes/resources.ts`) — same routes → controllers → services layering and the same "controllers never touch `Context`" rule as workspaces.
@@ -77,7 +77,15 @@ No test runner or lint config. Manual API testing via `src/test/auth.http` (VS C
 - `src/services/faker.ts` — `generateFakeRecords`, built on **`@ngneat/falso`** (per explicit instruction, not a default choice). Field-name regex heuristics (email/id·uuid/name/phone/url/price·amount/`_at`·date/status/description) pick a generator; an `isEnumLike` field's real observed values always win over a name guess; genuinely unmatched strings fall back to `randNoun()` — never a bare `"string"` placeholder, per the handover's explicit "a type-only generator... is a failure."
 - `src/services/beautify.ts` orchestrates both: pulls successful `runs.response` rows for a resource (unwrapping `.body` for `http`, using the raw value for firebase kinds — see the comment there for why), runs it through inference, then either renders TS or hands the shape to `faker.ts`. Throws 400 if the resource has zero successful runs yet — there's nothing to infer from.
 
-**Env validation** (`src/utils/env.ts`): all required vars (`DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `EMAIL_ID`, `EMAIL_PASS`) are asserted eagerly via `requiredEnv()` — missing any one throws at import time, before the server starts.
+**Actions (handover section G)**, mounted at `/api/workspaces/:workspaceId/actions` (`src/routes/actions.ts` → `controllers/actions.ts` → `services/actions.ts`, Zod in `validations/actions.ts`, manual coverage in `src/test/actions.http`):
+
+- Action CRUD + nested step CRUD (`POST/PATCH/DELETE .../steps[/:stepId]`, order auto-appended `max+1`, compacted on delete) + `PUT .../steps/reorder` (registered *before* `/:stepId` routes so "reorder" never matches as an id). Step names are `^[A-Za-z0-9_]+$` and unique per action — they're the `{{steps.<name>}}` reference keys.
+- `POST .../execute` runs steps sequentially: per step, `input_mapping` values are resolved against prior steps' in-memory results (`resolveStepRef` — refs live **only** in input_mapping, resolved values become plain flat variables for the resource's own `{{var}}` templates), then executed through the shared `executeHttpResourceRun` (`services/execute-resource.ts`, extracted from `executeTile` — Playground uses the same function). Per-step `runs` rows carry `step_id`/`action_run_id`; first failure (fetch error, HTTP ≥ 400, or unresolved ref) stops the chain and finishes the `action_runs` row as "error". Execute returns HTTP 200 with the run detail even on failure — the timeline consumes partials. See `../DECISIONS.md` (2026-07-30 entries) for the resolver/permission/reorder rationale.
+- Firebase-kind resources are rejected as steps at create/update time (only `http` executes server-side).
+- Run reads: `GET .../actions/:id/runs[?limit]` and `GET .../actions/:id/runs/:actionRunId` (timeline payload), plus workspace-level `GET /:workspaceId/runs?limit&resourceId` (`src/routes/runs.ts`, `resource:read`) for dashboard/recent-history.
+- Permissions: `action:read/write/delete/execute` in `ROLE_PERMISSIONS` — editor gets execute, viewer does not (writes shared runs; see DECISIONS.md).
+
+**Env validation** (`src/utils/env.ts`): all required vars (`DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `EMAIL_ID`, `EMAIL_PASS`, `PORT`, `CONNECTION_SECRET_KEY`) are asserted eagerly via `requiredEnv()` — missing any one throws at import time, before the server starts. `SEED_EMAIL` is deliberately NOT in env.ts (seed-only, read directly off `process.env`).
 
 **Email sending** (`src/services/transporter.ts`): nodemailer configured for Gmail service using `EMAIL_ID`/`EMAIL_PASS`. All templates share one HTML shell (`src/templates/emails/template.ts`) and are exported through `src/templates/emails/index.ts`.
 

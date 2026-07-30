@@ -15,13 +15,19 @@ export type WorkspaceAction =
   | "connection:delete"
   | "resource:read"
   | "resource:write"
-  | "resource:delete";
+  | "resource:delete"
+  | "action:read"
+  | "action:write"
+  | "action:delete"
+  | "action:execute";
 
 // Single source of truth for what each role can do. Per-resource overrides
 // (handover DECISIONS #1) slot in later as extra entries here without touching
 // any call site — every call site goes through `can()`/`getWorkspaceRole`.
-// Content actions (connection/resource) are open to editor+ — viewer is
+// Content actions (connection/resource/action) are open to editor+ — viewer is
 // read-only everywhere; workspace administration stays owner/admin-only.
+// Executing an Action writes shared runs and fires real HTTP at shared
+// resources, so unlike the personal Playground it's withheld from viewer.
 const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspaceAction>> = {
   owner: new Set([
     "workspace:read",
@@ -35,6 +41,10 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspaceAction>> = {
     "resource:read",
     "resource:write",
     "resource:delete",
+    "action:read",
+    "action:write",
+    "action:delete",
+    "action:execute",
   ]),
   admin: new Set([
     "workspace:read",
@@ -47,9 +57,22 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspaceAction>> = {
     "resource:read",
     "resource:write",
     "resource:delete",
+    "action:read",
+    "action:write",
+    "action:delete",
+    "action:execute",
   ]),
-  editor: new Set(["workspace:read", "connection:read", "connection:write", "resource:read", "resource:write"]),
-  viewer: new Set(["workspace:read", "connection:read", "resource:read"]),
+  editor: new Set([
+    "workspace:read",
+    "connection:read",
+    "connection:write",
+    "resource:read",
+    "resource:write",
+    "action:read",
+    "action:write",
+    "action:execute",
+  ]),
+  viewer: new Set(["workspace:read", "connection:read", "resource:read", "action:read"]),
 };
 
 export function roleHasPermission(role: WorkspaceRole, action: WorkspaceAction): boolean {

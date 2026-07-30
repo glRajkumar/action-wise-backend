@@ -7,7 +7,7 @@ import * as schema from '../db/schema/auth'
 import { connectDB, db } from "./db"
 
 import { hashPassword, verifyPassword } from "../utils/password"
-import { createWorkspaceWithOwner } from "../services/workspaces"
+import { createWorkspaceWithOwner, ensurePersonalWorkspace } from "../services/workspaces"
 import { env } from '../utils/env'
 
 import {
@@ -83,23 +83,42 @@ export const auth = betterAuth({
     },
   },
   hooks: {
+    // Both branches swallow their own failures: a broken workspace insert or
+    // email send must never fail the auth request itself.
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path.startsWith('/sign-up')) {
-        const user = ctx.context.newSession?.user ?? {
-          name: ctx.body.name,
-          email: ctx.body.email,
-        }
+        try {
+          const user = ctx.context.newSession?.user ?? {
+            name: ctx.body.name,
+            email: ctx.body.email,
+          }
 
-        if (user != null) {
-          await welcomeEmail(user)
-        }
+          if (user != null) {
+            await welcomeEmail(user)
+          }
 
-        // Only the real newSession carries a persisted user id (the fallback
-        // above is name/email only, used when email verification blocks
-        // session creation) — a workspace needs a real FK target.
-        const newUser = ctx.context.newSession?.user
-        if (newUser != null) {
-          await createWorkspaceWithOwner(`${newUser.name}'s Workspace`, newUser.id)
+          // Only the real newSession carries a persisted user id (the fallback
+          // above is name/email only, used when email verification blocks
+          // session creation) — a workspace needs a real FK target.
+          const newUser = ctx.context.newSession?.user
+          if (newUser != null) {
+            await createWorkspaceWithOwner(`${newUser.name}'s Workspace`, newUser.id)
+          }
+        } catch (error) {
+          console.error('sign-up after-hook failed:', error)
+        }
+      }
+
+      // Users whose sign-up couldn't create a workspace (email verification
+      // blocked the session, see above) get it backfilled on next sign-in.
+      if (ctx.path.startsWith('/sign-in')) {
+        try {
+          const user = ctx.context.newSession?.user
+          if (user != null) {
+            await ensurePersonalWorkspace(user.id, user.name)
+          }
+        } catch (error) {
+          console.error('sign-in workspace backfill failed:', error)
         }
       }
     }),

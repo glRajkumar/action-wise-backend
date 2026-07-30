@@ -14,6 +14,8 @@ import { workspacesRouter } from './routes/workspaces'
 import { connectionsRouter } from './routes/connections'
 import { resourcesRouter } from './routes/resources'
 import { playgroundRouter } from './routes/playground'
+import { actionsRouter } from './routes/actions'
+import { runsRouter } from './routes/runs'
 
 const app = new Hono().basePath("/api")
 
@@ -32,6 +34,8 @@ app.route('/workspaces', workspacesRouter)
 app.route('/workspaces', connectionsRouter)
 app.route('/workspaces', resourcesRouter)
 app.route('/workspaces', playgroundRouter)
+app.route('/workspaces', actionsRouter)
+app.route('/workspaces', runsRouter)
 
 app.get('/', (c) => {
   return c.text('Hello Hono!')

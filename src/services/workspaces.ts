@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "../lib/db";
+import { users } from "../db/schema/auth";
 import type { WorkspaceRole } from "../db/schema/enums";
 import { workspaceInvites, workspaceMembers, workspaces } from "../db/schema/workspaces";
 import { AppError } from "../utils/errors";
@@ -15,6 +16,21 @@ export async function createWorkspaceWithOwner(name: string, ownerId: string) {
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: ownerId, role: "owner" });
 
   return workspace;
+}
+
+// Backfill for users who signed up while email verification blocked session
+// creation (no personal workspace got made — see lib/auth.ts). Only fires when
+// the user belongs to zero workspaces, so someone invited into another
+// workspace never gets a forced personal one.
+export async function ensurePersonalWorkspace(userId: string, name: string) {
+  const [membership] = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
+  if (membership) return null;
+
+  return createWorkspaceWithOwner(`${name}'s Workspace`, userId);
 }
 
 export async function listWorkspacesForUser(userId: string) {
@@ -41,8 +57,15 @@ export async function deleteWorkspace(workspaceId: string) {
 
 export async function listMembers(workspaceId: string) {
   return db
-    .select({ userId: workspaceMembers.userId, role: workspaceMembers.role, createdAt: workspaceMembers.createdAt })
+    .select({
+      userId: workspaceMembers.userId,
+      name: users.name,
+      email: users.email,
+      role: workspaceMembers.role,
+      createdAt: workspaceMembers.createdAt,
+    })
     .from(workspaceMembers)
+    .innerJoin(users, eq(workspaceMembers.userId, users.id))
     .where(eq(workspaceMembers.workspaceId, workspaceId));
 }
 

@@ -1,14 +1,11 @@
 import { and, eq } from "drizzle-orm";
 
-import type { HttpConnectionConfig } from "../db/schema/connections";
-import { connections } from "../db/schema/connections";
 import { playgroundBoards, playgroundTiles } from "../db/schema/playground";
 import { resources } from "../db/schema/resources";
 import { runs } from "../db/schema/runs";
 import { db } from "../lib/db";
 import { AppError } from "../utils/errors";
-import { getDecryptedConnectionSecret } from "./connections";
-import { buildAuthHeaders, executeHttpRequest, redactHeaders, resolveTemplate, resolveTemplateDeep } from "./http-execute";
+import { executeHttpResourceRun, type HttpResourceConfig } from "./execute-resource";
 import { createResource, type ResourceInput } from "./resources";
 
 type RenderMode = "json_tree" | "table" | "raw" | "big_number";
@@ -20,13 +17,6 @@ type HttpAdhocConfig = {
   address: string;
   config: HttpResourceConfig;
   payloadTemplate?: unknown;
-};
-
-type HttpResourceConfig = {
-  method: string;
-  headers?: Record<string, string>;
-  queryParams?: Record<string, string>;
-  bodyType: "json" | "form" | "raw" | "none";
 };
 
 // -- Boards --
@@ -208,76 +198,16 @@ export async function executeTile(
     payloadTemplate = adhoc.payloadTemplate;
   }
 
-  let baseUrl = "";
-  let mergedHeaders: Record<string, string> = { ...(config.headers ?? {}) };
+  const outcome = await executeHttpResourceRun(
+    workspaceId,
+    userId,
+    { connectionId, address, config, payloadTemplate },
+    variables,
+    { resourceId },
+  );
 
-  if (connectionId) {
-    const [connection] = await db
-      .select()
-      .from(connections)
-      .where(and(eq(connections.id, connectionId), eq(connections.workspaceId, workspaceId)));
-    if (!connection) throw new AppError("Connection not found in this workspace", 400);
-    if (connection.kind !== "http") throw new AppError("Connection is not an http connection", 400);
-
-    const httpConfig = connection.config as HttpConnectionConfig;
-    baseUrl = httpConfig.baseUrl;
-    mergedHeaders = { ...(httpConfig.defaultHeaders ?? {}), ...mergedHeaders };
-
-    const secret = await getDecryptedConnectionSecret(connectionId, userId);
-    Object.assign(mergedHeaders, buildAuthHeaders(httpConfig.auth, secret));
-  }
-
-  const resolvedUrl = resolveTemplate(`${baseUrl}${address}`, variables);
-  const resolvedHeaders = resolveTemplateDeep(mergedHeaders, variables);
-  const resolvedQuery = config.queryParams ? resolveTemplateDeep(config.queryParams, variables) : undefined;
-  const resolvedBody = payloadTemplate !== undefined ? resolveTemplateDeep(payloadTemplate, variables) : undefined;
-
-  const url = new URL(resolvedUrl);
-  if (resolvedQuery) {
-    for (const [key, value] of Object.entries(resolvedQuery)) url.searchParams.set(key, value);
-  }
-
-  const startedAt = new Date();
-  const requestSnapshot = {
-    method: config.method,
-    url: url.toString(),
-    headers: redactHeaders(resolvedHeaders),
-    body: resolvedBody,
-  };
-
-  try {
-    const result = await executeHttpRequest({
-      method: config.method,
-      url: url.toString(),
-      headers: resolvedHeaders,
-      bodyType: config.bodyType,
-      body: resolvedBody,
-    });
-
-    await db.insert(runs).values({
-      workspaceId,
-      resourceId,
-      triggeredBy: userId,
-      request: requestSnapshot,
-      response: { status: result.status, headers: redactHeaders(result.headers), body: result.body },
-      status: "success",
-      durationMs: result.durationMs,
-      executedAt: startedAt,
-    });
-
-    return result;
-  } catch (error) {
-    await db.insert(runs).values({
-      workspaceId,
-      resourceId,
-      triggeredBy: userId,
-      request: requestSnapshot,
-      response: { error: error instanceof Error ? error.message : "Unknown error" },
-      status: "error",
-      executedAt: startedAt,
-    });
-    throw new AppError(`Request execution failed: ${error instanceof Error ? error.message : "unknown error"}`, 400);
-  }
+  if (!outcome.ok) throw new AppError(`Request execution failed: ${outcome.error}`, 400);
+  return outcome.result;
 }
 
 export async function logFirebaseRun(
