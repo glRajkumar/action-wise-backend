@@ -1,16 +1,17 @@
 import { Hono } from "hono";
 
-import { exportWorkspaceResourceType, generateWorkspaceResourceFakeData } from "../controllers/beautify";
 import {
-  createWorkspaceFolder,
-  createWorkspaceResource,
-  deleteWorkspaceFolder,
-  deleteWorkspaceResource,
-  getWorkspaceResource,
-  listWorkspaceFolders,
-  listWorkspaceResources,
-  updateWorkspaceFolder,
-  updateWorkspaceResource,
+  createFolder,
+  createResource,
+  deleteFolder,
+  deleteResource,
+  exportResourceType,
+  generateFakeData,
+  getResource,
+  listFolders,
+  listResources,
+  updateFolder,
+  updateResource,
 } from "../controllers/resources";
 import { requireWorkspaceAccess } from "../middlewares/workspace-access";
 import type { AppEnv } from "../types/hono";
@@ -33,7 +34,7 @@ export const resourcesRouter = new Hono<AppEnv>()
     "/:workspaceId/resource-folders",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("resource:read"),
-    async (c) => c.json(await listWorkspaceFolders(c.req.valid("param").workspaceId)),
+    listFolders,
   )
 
   .post(
@@ -41,12 +42,7 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", createFolderSchema),
-    async (c) => {
-      const { workspaceId } = c.req.valid("param");
-      const { name, parentFolderId } = c.req.valid("json");
-      const folder = await createWorkspaceFolder(workspaceId, name, parentFolderId, c.get("userId"));
-      return c.json(folder, 201);
-    },
+    createFolder,
   )
 
   .patch(
@@ -54,22 +50,14 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", folderParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", updateFolderSchema),
-    async (c) => {
-      const { workspaceId, folderId } = c.req.valid("param");
-      const { name, parentFolderId } = c.req.valid("json");
-      return c.json(await updateWorkspaceFolder(workspaceId, folderId, name, parentFolderId));
-    },
+    updateFolder,
   )
 
   .delete(
     "/:workspaceId/resource-folders/:folderId",
     zv("param", folderParamSchema),
     requireWorkspaceAccess("resource:delete"),
-    async (c) => {
-      const { workspaceId, folderId } = c.req.valid("param");
-      await deleteWorkspaceFolder(workspaceId, folderId);
-      return c.json({ message: "Folder deleted" });
-    },
+    deleteFolder,
   )
 
   // -- resources --
@@ -78,11 +66,7 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", workspaceIdParamSchema),
     zv("query", listResourcesQuerySchema),
     requireWorkspaceAccess("resource:read"),
-    async (c) => {
-      const { workspaceId } = c.req.valid("param");
-      const { folderId } = c.req.valid("query");
-      return c.json(await listWorkspaceResources(workspaceId, folderId));
-    },
+    listResources,
   )
 
   .post(
@@ -90,22 +74,14 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", createResourceSchema),
-    async (c) => {
-      const { workspaceId } = c.req.valid("param");
-      const input = c.req.valid("json");
-      const resource = await createWorkspaceResource(workspaceId, input, c.get("userId"));
-      return c.json(resource, 201);
-    },
+    createResource,
   )
 
   .get(
     "/:workspaceId/resources/:resourceId",
     zv("param", resourceParamSchema),
     requireWorkspaceAccess("resource:read"),
-    async (c) => {
-      const { workspaceId, resourceId } = c.req.valid("param");
-      return c.json(await getWorkspaceResource(workspaceId, resourceId));
-    },
+    getResource,
   )
 
   .patch(
@@ -113,22 +89,14 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", resourceParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", updateResourceSchema),
-    async (c) => {
-      const { workspaceId, resourceId } = c.req.valid("param");
-      const input = c.req.valid("json");
-      return c.json(await updateWorkspaceResource(workspaceId, resourceId, input));
-    },
+    updateResource,
   )
 
   .delete(
     "/:workspaceId/resources/:resourceId",
     zv("param", resourceParamSchema),
     requireWorkspaceAccess("resource:delete"),
-    async (c) => {
-      const { workspaceId, resourceId } = c.req.valid("param");
-      await deleteWorkspaceResource(workspaceId, resourceId);
-      return c.json({ message: "Resource deleted" });
-    },
+    deleteResource,
   )
 
   // -- beautify / faker (handover E/F) --
@@ -136,10 +104,7 @@ export const resourcesRouter = new Hono<AppEnv>()
     "/:workspaceId/resources/:resourceId/export-type",
     zv("param", resourceParamSchema),
     requireWorkspaceAccess("resource:read"),
-    async (c) => {
-      const { workspaceId, resourceId } = c.req.valid("param");
-      return c.json(await exportWorkspaceResourceType(workspaceId, resourceId));
-    },
+    exportResourceType,
   )
 
   .post(
@@ -147,9 +112,5 @@ export const resourcesRouter = new Hono<AppEnv>()
     zv("param", resourceParamSchema),
     requireWorkspaceAccess("resource:read"),
     zv("json", generateFakeDataSchema),
-    async (c) => {
-      const { workspaceId, resourceId } = c.req.valid("param");
-      const { count } = c.req.valid("json");
-      return c.json(await generateWorkspaceResourceFakeData(workspaceId, resourceId, count));
-    },
+    generateFakeData,
   );

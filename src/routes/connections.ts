@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 
 import {
-  createWorkspaceConnection,
-  deleteMyConnectionSecret,
-  deleteWorkspaceConnection,
-  getWorkspaceConnection,
-  listWorkspaceConnections,
-  setMyConnectionSecret,
-  updateWorkspaceConnection,
+  createConnection,
+  deleteConnection,
+  deleteConnectionSecret,
+  getConnection,
+  listConnections,
+  setConnectionSecret,
+  updateConnection,
 } from "../controllers/connections";
 import { requireWorkspaceAccess } from "../middlewares/workspace-access";
 import type { AppEnv } from "../types/hono";
@@ -25,7 +25,7 @@ export const connectionsRouter = new Hono<AppEnv>()
     "/:workspaceId/connections",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("connection:read"),
-    async (c) => c.json(await listWorkspaceConnections(c.req.valid("param").workspaceId, c.get("userId"))),
+    listConnections,
   )
 
   .post(
@@ -33,22 +33,14 @@ export const connectionsRouter = new Hono<AppEnv>()
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("connection:write"),
     zv("json", createConnectionSchema),
-    async (c) => {
-      const { workspaceId } = c.req.valid("param");
-      const { kind, name, config } = c.req.valid("json");
-      const connection = await createWorkspaceConnection(workspaceId, kind, name, config, c.get("userId"));
-      return c.json(connection, 201);
-    },
+    createConnection,
   )
 
   .get(
     "/:workspaceId/connections/:connectionId",
     zv("param", connectionParamSchema),
     requireWorkspaceAccess("connection:read"),
-    async (c) => {
-      const { workspaceId, connectionId } = c.req.valid("param");
-      return c.json(await getWorkspaceConnection(workspaceId, connectionId, c.get("userId")));
-    },
+    getConnection,
   )
 
   .patch(
@@ -56,22 +48,14 @@ export const connectionsRouter = new Hono<AppEnv>()
     zv("param", connectionParamSchema),
     requireWorkspaceAccess("connection:write"),
     zv("json", updateConnectionSchema),
-    async (c) => {
-      const { workspaceId, connectionId } = c.req.valid("param");
-      const { kind, name, config } = c.req.valid("json");
-      return c.json(await updateWorkspaceConnection(workspaceId, connectionId, kind, name, config));
-    },
+    updateConnection,
   )
 
   .delete(
     "/:workspaceId/connections/:connectionId",
     zv("param", connectionParamSchema),
     requireWorkspaceAccess("connection:delete"),
-    async (c) => {
-      const { workspaceId, connectionId } = c.req.valid("param");
-      await deleteWorkspaceConnection(workspaceId, connectionId);
-      return c.json({ message: "Connection deleted" });
-    },
+    deleteConnection,
   )
 
   // Setting/removing YOUR OWN secret only requires being able to see the
@@ -81,21 +65,12 @@ export const connectionsRouter = new Hono<AppEnv>()
     zv("param", connectionParamSchema),
     requireWorkspaceAccess("connection:read"),
     zv("json", setConnectionSecretSchema),
-    async (c) => {
-      const { connectionId } = c.req.valid("param");
-      const { value } = c.req.valid("json");
-      await setMyConnectionSecret(connectionId, c.get("userId"), value);
-      return c.json({ message: "Secret saved" });
-    },
+    setConnectionSecret,
   )
 
   .delete(
     "/:workspaceId/connections/:connectionId/secret",
     zv("param", connectionParamSchema),
     requireWorkspaceAccess("connection:read"),
-    async (c) => {
-      const { connectionId } = c.req.valid("param");
-      await deleteMyConnectionSecret(connectionId, c.get("userId"));
-      return c.json({ message: "Secret deleted" });
-    },
+    deleteConnectionSecret,
   );

@@ -1,18 +1,18 @@
 import { Hono } from "hono";
 
 import {
-  createBoardTile,
-  createWorkspaceBoard,
-  deleteBoardTile,
-  deleteWorkspaceBoard,
-  executeBoardTile,
-  getWorkspaceBoard,
-  listBoardTiles,
-  listWorkspaceBoards,
-  logBoardTileFirebaseRun,
-  promoteBoardTile,
-  renameWorkspaceBoard,
-  updateBoardTile,
+  createBoard,
+  createTile,
+  deleteBoard,
+  deleteTile,
+  executeTile,
+  getBoard,
+  listBoards,
+  listTiles,
+  logFirebaseRun,
+  promoteTile,
+  updateBoard,
+  updateTile,
 } from "../controllers/playground";
 import { requireWorkspaceAccess } from "../middlewares/workspace-access";
 import type { AppEnv } from "../types/hono";
@@ -38,7 +38,7 @@ export const playgroundRouter = new Hono<AppEnv>()
     "/:workspaceId/playground/boards",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("workspace:read"),
-    async (c) => c.json(await listWorkspaceBoards(c.req.valid("param").workspaceId, c.get("userId"))),
+    listBoards,
   )
 
   .post(
@@ -46,22 +46,14 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", createBoardSchema),
-    async (c) => {
-      const { workspaceId } = c.req.valid("param");
-      const { name } = c.req.valid("json");
-      const board = await createWorkspaceBoard(workspaceId, c.get("userId"), name);
-      return c.json(board, 201);
-    },
+    createBoard,
   )
 
   .get(
     "/:workspaceId/playground/boards/:boardId",
     zv("param", boardParamSchema),
     requireWorkspaceAccess("workspace:read"),
-    async (c) => {
-      const { workspaceId, boardId } = c.req.valid("param");
-      return c.json(await getWorkspaceBoard(workspaceId, boardId, c.get("userId")));
-    },
+    getBoard,
   )
 
   .patch(
@@ -69,32 +61,21 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", boardParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", updateBoardSchema),
-    async (c) => {
-      const { workspaceId, boardId } = c.req.valid("param");
-      const { name } = c.req.valid("json");
-      return c.json(await renameWorkspaceBoard(workspaceId, boardId, c.get("userId"), name));
-    },
+    updateBoard,
   )
 
   .delete(
     "/:workspaceId/playground/boards/:boardId",
     zv("param", boardParamSchema),
     requireWorkspaceAccess("workspace:read"),
-    async (c) => {
-      const { workspaceId, boardId } = c.req.valid("param");
-      await deleteWorkspaceBoard(workspaceId, boardId, c.get("userId"));
-      return c.json({ message: "Board deleted" });
-    },
+    deleteBoard,
   )
 
   .get(
     "/:workspaceId/playground/boards/:boardId/tiles",
     zv("param", boardParamSchema),
     requireWorkspaceAccess("workspace:read"),
-    async (c) => {
-      const { workspaceId, boardId } = c.req.valid("param");
-      return c.json(await listBoardTiles(workspaceId, boardId, c.get("userId")));
-    },
+    listTiles,
   )
 
   .post(
@@ -102,11 +83,7 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", boardParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", createTileSchema),
-    async (c) => {
-      const { workspaceId, boardId } = c.req.valid("param");
-      const tile = await createBoardTile(workspaceId, boardId, c.get("userId"), c.req.valid("json"));
-      return c.json(tile, 201);
-    },
+    createTile,
   )
 
   .patch(
@@ -114,21 +91,14 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", tileOnlyParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", updateTileSchema),
-    async (c) => {
-      const { workspaceId, tileId } = c.req.valid("param");
-      return c.json(await updateBoardTile(workspaceId, tileId, c.get("userId"), c.req.valid("json")));
-    },
+    updateTile,
   )
 
   .delete(
     "/:workspaceId/playground/tiles/:tileId",
     zv("param", tileOnlyParamSchema),
     requireWorkspaceAccess("workspace:read"),
-    async (c) => {
-      const { workspaceId, tileId } = c.req.valid("param");
-      await deleteBoardTile(workspaceId, tileId, c.get("userId"));
-      return c.json({ message: "Tile deleted" });
-    },
+    deleteTile,
   )
 
   // Server-proxied execution — http tiles only. Firebase tiles run client-side
@@ -138,11 +108,7 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", tileOnlyParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", executeTileSchema),
-    async (c) => {
-      const { workspaceId, tileId } = c.req.valid("param");
-      const { variables } = c.req.valid("json");
-      return c.json(await executeBoardTile(workspaceId, tileId, c.get("userId"), variables));
-    },
+    executeTile,
   )
 
   .post(
@@ -150,11 +116,7 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", tileOnlyParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", logFirebaseRunSchema),
-    async (c) => {
-      const { workspaceId, tileId } = c.req.valid("param");
-      const run = await logBoardTileFirebaseRun(workspaceId, tileId, c.get("userId"), c.req.valid("json"));
-      return c.json(run, 201);
-    },
+    logFirebaseRun,
   )
 
   .post(
@@ -162,9 +124,5 @@ export const playgroundRouter = new Hono<AppEnv>()
     zv("param", tileOnlyParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", promoteTileSchema),
-    async (c) => {
-      const { workspaceId, tileId } = c.req.valid("param");
-      const result = await promoteBoardTile(workspaceId, tileId, c.get("userId"), c.req.valid("json"));
-      return c.json(result, 201);
-    },
+    promoteTile,
   );
