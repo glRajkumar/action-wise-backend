@@ -22,9 +22,10 @@ GET {{host}}/workspaces/{{workspaceId}}/playground/boards
 Origin: {{origin}}
 
 
-### create an ad-hoc http tile (not saved to the registry yet)
+### create an ad-hoc http tile (not saved to the registry yet) — item route,
+### nested collection under boardId alone
 @boardId = REPLACE_WITH_BOARD_ID
-POST {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}/tiles
+POST {{host}}/playground/boards/{{boardId}}/tiles
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -41,13 +42,13 @@ Origin: {{origin}}
 
 
 ### list tiles on a board
-GET {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}/tiles
+GET {{host}}/playground/boards/{{boardId}}/tiles
 Origin: {{origin}}
 
 
-### reposition a tile
+### reposition a tile (item route — tileId alone identifies it)
 @tileId = REPLACE_WITH_TILE_ID
-PATCH {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}
+PATCH {{host}}/playground/tiles/{{tileId}}
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -57,7 +58,7 @@ Origin: {{origin}}
 
 
 ### execute the tile's http request (server-proxied, records a Run)
-POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/execute
+POST {{host}}/playground/tiles/{{tileId}}/execute
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -67,7 +68,7 @@ Origin: {{origin}}
 
 
 ### record a Run for a tile whose Firebase read/write already ran client-side
-POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/runs
+POST {{host}}/playground/tiles/{{tileId}}/runs
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -80,7 +81,7 @@ Origin: {{origin}}
 
 
 ### save the tile to the registry (requires adhocConfig.connectionId to be set)
-POST {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}/promote
+POST {{host}}/playground/tiles/{{tileId}}/promote
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -92,10 +93,10 @@ Origin: {{origin}}
 
 
 ### delete tile
-DELETE {{host}}/workspaces/{{workspaceId}}/playground/tiles/{{tileId}}
+DELETE {{host}}/playground/tiles/{{tileId}}
 Origin: {{origin}}
 
 
-### delete board
-DELETE {{host}}/workspaces/{{workspaceId}}/playground/boards/{{boardId}}
+### delete board (item route — boardId alone identifies it)
+DELETE {{host}}/playground/boards/{{boardId}}
 Origin: {{origin}}

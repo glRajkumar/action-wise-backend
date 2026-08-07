@@ -42,14 +42,14 @@ Origin: {{origin}}
 }
 
 
-### get one connection
+### get one connection (item route — connectionId alone identifies it)
 @connectionId = REPLACE_WITH_CONNECTION_ID
-GET {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+GET {{host}}/connections/{{connectionId}}
 Origin: {{origin}}
 
 
 ### update connection
-PATCH {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+PATCH {{host}}/connections/{{connectionId}}
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -61,7 +61,7 @@ Origin: {{origin}}
 
 
 ### set my secret for this connection (e.g. an API key or bearer token)
-PUT {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}/secret
+PUT {{host}}/connections/{{connectionId}}/secret
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -71,10 +71,10 @@ Origin: {{origin}}
 
 
 ### remove my secret
-DELETE {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}/secret
+DELETE {{host}}/connections/{{connectionId}}/secret
 Origin: {{origin}}
 
 
 ### delete connection
-DELETE {{host}}/workspaces/{{workspaceId}}/connections/{{connectionId}}
+DELETE {{host}}/connections/{{connectionId}}
 Origin: {{origin}}

@@ -15,8 +15,9 @@ import {
 } from "../services/resources";
 import type { AppEnv } from "../types/hono";
 import { AppError } from "../utils/errors";
+import { assertWorkspaceAccess } from "../utils/permissions";
 
-// -- folders --
+// -- folders (collection: list/create — workspaceId from the path) --
 
 export async function listFolders(c: Context<AppEnv>) {
   const { workspaceId } = c.req.valid("param" as never) as { workspaceId: string };
@@ -43,12 +44,27 @@ export async function createFolder(c: Context<AppEnv>) {
   return c.json(folder, 201);
 }
 
+// -- folders (item: update/delete by folderId — workspaceId from the row) --
+
+async function requireFolderWorkspaceId(folderId: string): Promise<string> {
+  const [row] = await db
+    .select({ workspaceId: resourceFolders.workspaceId })
+    .from(resourceFolders)
+    .where(eq(resourceFolders.id, folderId));
+  if (!row) throw new AppError("Folder not found", 404);
+  return row.workspaceId;
+}
+
 export async function updateFolder(c: Context<AppEnv>) {
-  const { workspaceId, folderId } = c.req.valid("param" as never) as { workspaceId: string; folderId: string };
+  const { folderId } = c.req.valid("param" as never) as { folderId: string };
   const { name, parentFolderId } = c.req.valid("json" as never) as {
     name: string;
     parentFolderId?: string | null;
   };
+  const userId = c.get("userId");
+
+  const workspaceId = await requireFolderWorkspaceId(folderId);
+  await assertWorkspaceAccess(userId, workspaceId, "resource:write");
 
   if (parentFolderId) {
     if (parentFolderId === folderId) throw new AppError("A folder cannot be its own parent", 400);
@@ -58,7 +74,7 @@ export async function updateFolder(c: Context<AppEnv>) {
   const [folder] = await db
     .update(resourceFolders)
     .set({ name, parentFolderId: parentFolderId ?? null })
-    .where(and(eq(resourceFolders.id, folderId), eq(resourceFolders.workspaceId, workspaceId)))
+    .where(eq(resourceFolders.id, folderId))
     .returning();
 
   if (!folder) throw new AppError("Folder not found", 404);
@@ -68,18 +84,19 @@ export async function updateFolder(c: Context<AppEnv>) {
 // Child folders/resources land at root (set null) rather than being blocked or
 // cascade-deleted — matches the FK behavior fixed in the Section A schema.
 export async function deleteFolder(c: Context<AppEnv>) {
-  const { workspaceId, folderId } = c.req.valid("param" as never) as { workspaceId: string; folderId: string };
+  const { folderId } = c.req.valid("param" as never) as { folderId: string };
+  const userId = c.get("userId");
 
-  const [deleted] = await db
-    .delete(resourceFolders)
-    .where(and(eq(resourceFolders.id, folderId), eq(resourceFolders.workspaceId, workspaceId)))
-    .returning();
+  const workspaceId = await requireFolderWorkspaceId(folderId);
+  await assertWorkspaceAccess(userId, workspaceId, "resource:delete");
+
+  const [deleted] = await db.delete(resourceFolders).where(eq(resourceFolders.id, folderId)).returning();
   if (!deleted) throw new AppError("Folder not found", 404);
 
   return c.json({ message: "Folder deleted" });
 }
 
-// -- resources --
+// -- resources (collection: list/create — workspaceId from the path) --
 
 export async function listResources(c: Context<AppEnv>) {
   const { workspaceId } = c.req.valid("param" as never) as { workspaceId: string };
@@ -104,30 +121,34 @@ export async function createResource(c: Context<AppEnv>) {
   return c.json(resource, 201);
 }
 
-export async function getResource(c: Context<AppEnv>) {
-  const { workspaceId, resourceId } = c.req.valid("param" as never) as { workspaceId: string; resourceId: string };
+// -- resources (item: get/update/delete by resourceId — workspaceId from the row) --
 
-  const [resource] = await db
-    .select()
-    .from(resources)
-    .where(and(eq(resources.id, resourceId), eq(resources.workspaceId, workspaceId)));
+async function requireResource(resourceId: string) {
+  const [resource] = await db.select().from(resources).where(eq(resources.id, resourceId));
   if (!resource) throw new AppError("Resource not found", 404);
+  return resource;
+}
+
+export async function getResource(c: Context<AppEnv>) {
+  const { resourceId } = c.req.valid("param" as never) as { resourceId: string };
+  const userId = c.get("userId");
+
+  const resource = await requireResource(resourceId);
+  await assertWorkspaceAccess(userId, resource.workspaceId, "resource:read");
   return c.json(resource);
 }
 
 export async function updateResource(c: Context<AppEnv>) {
-  const { workspaceId, resourceId } = c.req.valid("param" as never) as { workspaceId: string; resourceId: string };
+  const { resourceId } = c.req.valid("param" as never) as { resourceId: string };
   const input = c.req.valid("json" as never) as ResourceInput;
+  const userId = c.get("userId");
 
-  const [existing] = await db
-    .select()
-    .from(resources)
-    .where(and(eq(resources.id, resourceId), eq(resources.workspaceId, workspaceId)));
-  if (!existing) throw new AppError("Resource not found", 404);
+  const existing = await requireResource(resourceId);
+  await assertWorkspaceAccess(userId, existing.workspaceId, "resource:write");
   if (existing.kind !== input.kind) throw new AppError("Resource kind cannot be changed after creation", 400);
 
-  await assertConnectionInWorkspace(workspaceId, input.connectionId);
-  if (input.folderId) await assertFolderInWorkspace(workspaceId, input.folderId);
+  await assertConnectionInWorkspace(existing.workspaceId, input.connectionId);
+  if (input.folderId) await assertFolderInWorkspace(existing.workspaceId, input.folderId);
 
   const [resource] = await db
     .update(resources)
@@ -141,7 +162,7 @@ export async function updateResource(c: Context<AppEnv>) {
       payloadTemplate: input.payloadTemplate,
       config: input.config,
     })
-    .where(and(eq(resources.id, resourceId), eq(resources.workspaceId, workspaceId)))
+    .where(eq(resources.id, resourceId))
     .returning();
 
   if (!resource) throw new AppError("Resource not found", 404);
@@ -149,26 +170,35 @@ export async function updateResource(c: Context<AppEnv>) {
 }
 
 export async function deleteResource(c: Context<AppEnv>) {
-  const { workspaceId, resourceId } = c.req.valid("param" as never) as { workspaceId: string; resourceId: string };
+  const { resourceId } = c.req.valid("param" as never) as { resourceId: string };
+  const userId = c.get("userId");
 
-  const [deleted] = await db
-    .delete(resources)
-    .where(and(eq(resources.id, resourceId), eq(resources.workspaceId, workspaceId)))
-    .returning();
+  const existing = await requireResource(resourceId);
+  await assertWorkspaceAccess(userId, existing.workspaceId, "resource:delete");
+
+  const [deleted] = await db.delete(resources).where(eq(resources.id, resourceId)).returning();
   if (!deleted) throw new AppError("Resource not found", 404);
 
   return c.json({ message: "Resource deleted" });
 }
 
-// -- beautify / faker (handover E/F) --
+// -- beautify / faker (handover E/F) — item routes, resourceId only --
 
 export async function exportResourceType(c: Context<AppEnv>) {
-  const { workspaceId, resourceId } = c.req.valid("param" as never) as { workspaceId: string; resourceId: string };
-  return c.json(await exportResourceTypeService(workspaceId, resourceId));
+  const { resourceId } = c.req.valid("param" as never) as { resourceId: string };
+  const userId = c.get("userId");
+
+  const resource = await requireResource(resourceId);
+  await assertWorkspaceAccess(userId, resource.workspaceId, "resource:read");
+  return c.json(await exportResourceTypeService(resource.workspaceId, resourceId));
 }
 
 export async function generateFakeData(c: Context<AppEnv>) {
-  const { workspaceId, resourceId } = c.req.valid("param" as never) as { workspaceId: string; resourceId: string };
+  const { resourceId } = c.req.valid("param" as never) as { resourceId: string };
   const { count } = c.req.valid("json" as never) as { count: number };
-  return c.json(await generateFakeDataService(workspaceId, resourceId, count));
+  const userId = c.get("userId");
+
+  const resource = await requireResource(resourceId);
+  await assertWorkspaceAccess(userId, resource.workspaceId, "resource:read");
+  return c.json(await generateFakeDataService(resource.workspaceId, resourceId, count));
 }

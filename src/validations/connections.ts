@@ -35,7 +35,6 @@ export const createConnectionSchema = z.discriminatedUnion("kind", [
 export const updateConnectionSchema = createConnectionSchema;
 
 export const connectionParamSchema = z.object({
-  workspaceId: z.uuid(),
   connectionId: z.uuid(),
 });
 

@@ -22,7 +22,7 @@ export const updateMemberRoleSchema = z.object({
   role: z.enum(WORKSPACE_ROLES),
 });
 
-export const inviteParamSchema = workspaceIdParamSchema.extend({
+export const inviteParamSchema = z.object({
   inviteId: z.uuid(),
 });
 

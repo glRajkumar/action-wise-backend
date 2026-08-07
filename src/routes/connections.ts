@@ -12,15 +12,12 @@ import {
 import { requireWorkspaceAccess } from "../middlewares/workspace-access";
 import type { AppEnv } from "../types/hono";
 import { zv } from "../utils/validate";
-import {
-  connectionParamSchema,
-  createConnectionSchema,
-  setConnectionSecretSchema,
-  updateConnectionSchema,
-} from "../validations/connections";
+import { connectionParamSchema, createConnectionSchema, setConnectionSecretSchema, updateConnectionSchema } from "../validations/connections";
 import { workspaceIdParamSchema } from "../validations/workspaces";
 
-export const connectionsRouter = new Hono<AppEnv>()
+// Collection — mounted under /workspaces/:workspaceId/connections, workspaceId
+// says which workspace's connections to list/create in.
+export const connectionsCollectionRouter = new Hono<AppEnv>()
   .get(
     "/:workspaceId/connections",
     zv("param", workspaceIdParamSchema),
@@ -34,43 +31,30 @@ export const connectionsRouter = new Hono<AppEnv>()
     requireWorkspaceAccess("connection:write"),
     zv("json", createConnectionSchema),
     createConnection,
-  )
+  );
 
-  .get(
-    "/:workspaceId/connections/:connectionId",
-    zv("param", connectionParamSchema),
-    requireWorkspaceAccess("connection:read"),
-    getConnection,
-  )
+// Item — mounted flat at /connections/:connectionId. connectionId alone
+// identifies the row; each controller derives workspaceId from it and calls
+// assertWorkspaceAccess itself instead of a path-driven middleware.
+export const connectionItemsRouter = new Hono<AppEnv>()
+  .get("/:connectionId", zv("param", connectionParamSchema), getConnection)
 
   .patch(
-    "/:workspaceId/connections/:connectionId",
+    "/:connectionId",
     zv("param", connectionParamSchema),
-    requireWorkspaceAccess("connection:write"),
     zv("json", updateConnectionSchema),
     updateConnection,
   )
 
-  .delete(
-    "/:workspaceId/connections/:connectionId",
-    zv("param", connectionParamSchema),
-    requireWorkspaceAccess("connection:delete"),
-    deleteConnection,
-  )
+  .delete("/:connectionId", zv("param", connectionParamSchema), deleteConnection)
 
   // Setting/removing YOUR OWN secret only requires being able to see the
   // connection, not full write access — it doesn't change the shared config.
   .put(
-    "/:workspaceId/connections/:connectionId/secret",
+    "/:connectionId/secret",
     zv("param", connectionParamSchema),
-    requireWorkspaceAccess("connection:read"),
     zv("json", setConnectionSecretSchema),
     setConnectionSecret,
   )
 
-  .delete(
-    "/:workspaceId/connections/:connectionId/secret",
-    zv("param", connectionParamSchema),
-    requireWorkspaceAccess("connection:read"),
-    deleteConnectionSecret,
-  );
+  .delete("/:connectionId/secret", zv("param", connectionParamSchema), deleteConnectionSecret);

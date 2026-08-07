@@ -40,7 +40,6 @@ export const createResourceSchema = z.discriminatedUnion("kind", [
 export const updateResourceSchema = createResourceSchema;
 
 export const resourceParamSchema = z.object({
-  workspaceId: z.uuid(),
   resourceId: z.uuid(),
 });
 
@@ -56,6 +55,5 @@ export const createFolderSchema = z.object({
 export const updateFolderSchema = createFolderSchema;
 
 export const folderParamSchema = z.object({
-  workspaceId: z.uuid(),
   folderId: z.uuid(),
 });

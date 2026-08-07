@@ -28,8 +28,9 @@ import {
 } from "../validations/resources";
 import { workspaceIdParamSchema } from "../validations/workspaces";
 
-export const resourcesRouter = new Hono<AppEnv>()
-  // -- folders --
+// Collection — mounted under /workspaces/:workspaceId/..., workspaceId says
+// which workspace's folders/resources to list/create in.
+export const resourcesCollectionRouter = new Hono<AppEnv>()
   .get(
     "/:workspaceId/resource-folders",
     zv("param", workspaceIdParamSchema),
@@ -45,22 +46,6 @@ export const resourcesRouter = new Hono<AppEnv>()
     createFolder,
   )
 
-  .patch(
-    "/:workspaceId/resource-folders/:folderId",
-    zv("param", folderParamSchema),
-    requireWorkspaceAccess("resource:write"),
-    zv("json", updateFolderSchema),
-    updateFolder,
-  )
-
-  .delete(
-    "/:workspaceId/resource-folders/:folderId",
-    zv("param", folderParamSchema),
-    requireWorkspaceAccess("resource:delete"),
-    deleteFolder,
-  )
-
-  // -- resources --
   .get(
     "/:workspaceId/resources",
     zv("param", workspaceIdParamSchema),
@@ -75,42 +60,42 @@ export const resourcesRouter = new Hono<AppEnv>()
     requireWorkspaceAccess("resource:write"),
     zv("json", createResourceSchema),
     createResource,
-  )
+  );
 
+// Item — mounted flat, folderId/resourceId alone identify the row; each
+// controller derives workspaceId from it and calls assertWorkspaceAccess itself.
+export const resourceItemsRouter = new Hono<AppEnv>()
   .get(
-    "/:workspaceId/resources/:resourceId",
+    "/:resourceId",
     zv("param", resourceParamSchema),
-    requireWorkspaceAccess("resource:read"),
     getResource,
   )
 
   .patch(
-    "/:workspaceId/resources/:resourceId",
+    "/:resourceId",
     zv("param", resourceParamSchema),
-    requireWorkspaceAccess("resource:write"),
     zv("json", updateResourceSchema),
     updateResource,
   )
 
-  .delete(
-    "/:workspaceId/resources/:resourceId",
-    zv("param", resourceParamSchema),
-    requireWorkspaceAccess("resource:delete"),
-    deleteResource,
-  )
+  .delete("/:resourceId", zv("param", resourceParamSchema), deleteResource)
 
   // -- beautify / faker (handover E/F) --
-  .get(
-    "/:workspaceId/resources/:resourceId/export-type",
-    zv("param", resourceParamSchema),
-    requireWorkspaceAccess("resource:read"),
-    exportResourceType,
-  )
+  .get("/:resourceId/export-type", zv("param", resourceParamSchema), exportResourceType)
 
   .post(
-    "/:workspaceId/resources/:resourceId/fake-data",
+    "/:resourceId/fake-data",
     zv("param", resourceParamSchema),
-    requireWorkspaceAccess("resource:read"),
     zv("json", generateFakeDataSchema),
     generateFakeData,
   );
+
+export const folderItemsRouter = new Hono<AppEnv>()
+  .patch(
+    "/:folderId",
+    zv("param", folderParamSchema),
+    zv("json", updateFolderSchema),
+    updateFolder,
+  )
+
+  .delete("/:folderId", zv("param", folderParamSchema), deleteFolder);

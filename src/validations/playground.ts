@@ -36,7 +36,6 @@ export const updateBoardSchema = z.object({
 });
 
 export const boardParamSchema = z.object({
-  workspaceId: z.uuid(),
   boardId: z.uuid(),
 });
 
@@ -70,8 +69,7 @@ export const updateTileSchema = z
     message: "At least one field must be provided",
   });
 
-export const tileOnlyParamSchema = z.object({
-  workspaceId: z.uuid(),
+export const tileParamSchema = z.object({
   tileId: z.uuid(),
 });
 

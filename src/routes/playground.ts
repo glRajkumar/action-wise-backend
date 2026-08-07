@@ -24,16 +24,15 @@ import {
   executeTileSchema,
   logFirebaseRunSchema,
   promoteTileSchema,
-  tileOnlyParamSchema,
+  tileParamSchema,
   updateBoardSchema,
   updateTileSchema,
 } from "../validations/playground";
 import { workspaceIdParamSchema } from "../validations/workspaces";
 
-// Playground is a personal scratchpad: any workspace member (any role) can use
-// their own boards/tiles, gated on plain workspace membership. Only
-// "save to registry" (promote) touches shared state and needs resource:write.
-export const playgroundRouter = new Hono<AppEnv>()
+// Collection — mounted under /workspaces/:workspaceId/playground/boards,
+// workspaceId says which workspace's boards to list/create in.
+export const playgroundCollectionRouter = new Hono<AppEnv>()
   .get(
     "/:workspaceId/playground/boards",
     zv("param", workspaceIdParamSchema),
@@ -47,82 +46,61 @@ export const playgroundRouter = new Hono<AppEnv>()
     requireWorkspaceAccess("workspace:read"),
     zv("json", createBoardSchema),
     createBoard,
-  )
+  );
 
-  .get(
-    "/:workspaceId/playground/boards/:boardId",
-    zv("param", boardParamSchema),
-    requireWorkspaceAccess("workspace:read"),
-    getBoard,
-  )
+// Item — mounted flat at /playground. boardId/tileId alone identify the row;
+// each controller derives workspaceId from it and calls assertWorkspaceAccess
+// itself. Playground is a personal scratchpad, gated on plain workspace
+// membership — only "save to registry" (promote) needs resource:write.
+export const playgroundItemsRouter = new Hono<AppEnv>()
+  .get("/boards/:boardId", zv("param", boardParamSchema), getBoard)
 
   .patch(
-    "/:workspaceId/playground/boards/:boardId",
+    "/boards/:boardId",
     zv("param", boardParamSchema),
-    requireWorkspaceAccess("workspace:read"),
     zv("json", updateBoardSchema),
     updateBoard,
   )
 
-  .delete(
-    "/:workspaceId/playground/boards/:boardId",
-    zv("param", boardParamSchema),
-    requireWorkspaceAccess("workspace:read"),
-    deleteBoard,
-  )
+  .delete("/boards/:boardId", zv("param", boardParamSchema), deleteBoard)
 
-  .get(
-    "/:workspaceId/playground/boards/:boardId/tiles",
-    zv("param", boardParamSchema),
-    requireWorkspaceAccess("workspace:read"),
-    listTiles,
-  )
+  .get("/boards/:boardId/tiles", zv("param", boardParamSchema), listTiles)
 
   .post(
-    "/:workspaceId/playground/boards/:boardId/tiles",
+    "/boards/:boardId/tiles",
     zv("param", boardParamSchema),
-    requireWorkspaceAccess("workspace:read"),
     zv("json", createTileSchema),
     createTile,
   )
 
   .patch(
-    "/:workspaceId/playground/tiles/:tileId",
-    zv("param", tileOnlyParamSchema),
-    requireWorkspaceAccess("workspace:read"),
+    "/tiles/:tileId",
+    zv("param", tileParamSchema),
     zv("json", updateTileSchema),
     updateTile,
   )
 
-  .delete(
-    "/:workspaceId/playground/tiles/:tileId",
-    zv("param", tileOnlyParamSchema),
-    requireWorkspaceAccess("workspace:read"),
-    deleteTile,
-  )
+  .delete("/tiles/:tileId", zv("param", tileParamSchema), deleteTile)
 
   // Server-proxied execution — http tiles only. Firebase tiles run client-side
   // and use POST .../runs below to record the result instead.
   .post(
-    "/:workspaceId/playground/tiles/:tileId/execute",
-    zv("param", tileOnlyParamSchema),
-    requireWorkspaceAccess("workspace:read"),
+    "/tiles/:tileId/execute",
+    zv("param", tileParamSchema),
     zv("json", executeTileSchema),
     executeTile,
   )
 
   .post(
-    "/:workspaceId/playground/tiles/:tileId/runs",
-    zv("param", tileOnlyParamSchema),
-    requireWorkspaceAccess("workspace:read"),
+    "/tiles/:tileId/runs",
+    zv("param", tileParamSchema),
     zv("json", logFirebaseRunSchema),
     logFirebaseRun,
   )
 
   .post(
-    "/:workspaceId/playground/tiles/:tileId/promote",
-    zv("param", tileOnlyParamSchema),
-    requireWorkspaceAccess("resource:write"),
+    "/tiles/:tileId/promote",
+    zv("param", tileParamSchema),
     zv("json", promoteTileSchema),
     promoteTile,
   );

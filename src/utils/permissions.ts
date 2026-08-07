@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../lib/db";
 import { workspaceMembers } from "../db/schema/workspaces";
 import type { WorkspaceRole } from "../db/schema/enums";
+import { AppError } from "./errors";
 
 export type WorkspaceAction =
   | "workspace:read"
@@ -93,4 +94,20 @@ type Subject = { type: "workspace"; workspaceId: string };
 export async function can(userId: string, action: WorkspaceAction, subject: Subject): Promise<boolean> {
   const role = await getWorkspaceRole(userId, subject.workspaceId);
   return role !== null && roleHasPermission(role, action);
+}
+
+// Shared by requireWorkspaceAccess (workspaceId from the path, on collection
+// routes) and item-route controllers (workspaceId derived from the loaded
+// row, since item routes no longer carry :workspaceId in the URL). No
+// membership row -> 404 (don't reveal whether the workspace exists to a
+// non-member); membership row but insufficient role -> 403.
+export async function assertWorkspaceAccess(
+  userId: string,
+  workspaceId: string,
+  action: WorkspaceAction,
+): Promise<WorkspaceRole> {
+  const role = await getWorkspaceRole(userId, workspaceId);
+  if (!role) throw new AppError("Workspace not found", 404);
+  if (!roleHasPermission(role, action)) throw new AppError("Forbidden", 403);
+  return role;
 }

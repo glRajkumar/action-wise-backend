@@ -52,14 +52,14 @@ GET {{host}}/workspaces/{{workspaceId}}/resources?folderId={{folderId}}
 Origin: {{origin}}
 
 
-### get one resource
+### get one resource (item route — resourceId alone identifies it)
 @resourceId = REPLACE_WITH_RESOURCE_ID
-GET {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+GET {{host}}/resources/{{resourceId}}
 Origin: {{origin}}
 
 
 ### update resource (kind must stay the same as on creation)
-PATCH {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+PATCH {{host}}/resources/{{resourceId}}
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -79,12 +79,12 @@ Origin: {{origin}}
 
 ### export a TypeScript type from this resource's recorded runs (needs at
 ### least one successful run — execute the tile in playground.http first)
-GET {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}/export-type
+GET {{host}}/resources/{{resourceId}}/export-type
 Origin: {{origin}}
 
 
 ### generate fake data matching the inferred shape
-POST {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}/fake-data
+POST {{host}}/resources/{{resourceId}}/fake-data
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -94,10 +94,10 @@ Origin: {{origin}}
 
 
 ### delete resource
-DELETE {{host}}/workspaces/{{workspaceId}}/resources/{{resourceId}}
+DELETE {{host}}/resources/{{resourceId}}
 Origin: {{origin}}
 
 
-### delete folder
-DELETE {{host}}/workspaces/{{workspaceId}}/resource-folders/{{folderId}}
+### delete folder (item route — folderId alone identifies it)
+DELETE {{host}}/resource-folders/{{folderId}}
 Origin: {{origin}}

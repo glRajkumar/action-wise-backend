@@ -8,14 +8,15 @@ import { db } from "../lib/db";
 import { runActionSteps } from "../services/execute-action";
 import type { AppEnv } from "../types/hono";
 import { AppError } from "../utils/errors";
+import { assertWorkspaceAccess, type WorkspaceAction } from "../utils/permissions";
 
-async function requireAction(workspaceId: string, actionId: string) {
-  const [action] = await db
-    .select()
-    .from(actions)
-    .where(and(eq(actions.id, actionId), eq(actions.workspaceId, workspaceId)));
-  if (!action) throw new AppError("Action not found", 404);
-  return action;
+// actionId alone identifies the row; workspaceId is derived from it and
+// assertWorkspaceAccess re-checks membership/role every request.
+async function requireAction(actionId: string, userId: string, action: WorkspaceAction) {
+  const [row] = await db.select().from(actions).where(eq(actions.id, actionId));
+  if (!row) throw new AppError("Action not found", 404);
+  await assertWorkspaceAccess(userId, row.workspaceId, action);
+  return row;
 }
 
 async function listSteps(actionId: string) {
@@ -67,8 +68,9 @@ async function assertStepNameAvailable(actionId: string, name: string, excludeSt
   if (clash) throw new AppError(`A step named "${name}" already exists in this action`, 400);
 }
 
-async function getRunDetail(workspaceId: string, actionId: string, actionRunId: string) {
-  await requireAction(workspaceId, actionId);
+// Caller has already resolved/authorized the action (via requireAction) —
+// this only assembles the run + its per-step run rows.
+async function getRunDetail(actionId: string, actionRunId: string) {
   const [actionRun] = await db
     .select()
     .from(actionRuns)
@@ -96,7 +98,7 @@ async function getRunDetail(workspaceId: string, actionId: string, actionRunId: 
   return { actionRun, stepRuns };
 }
 
-// -- Actions CRUD --
+// -- Actions CRUD (collection: list/create — workspaceId from the path) --
 
 export async function listActions(c: Context<AppEnv>) {
   const { workspaceId } = c.req.valid("param" as never) as { workspaceId: string };
@@ -150,18 +152,20 @@ export async function createAction(c: Context<AppEnv>) {
   return c.json(action, 201);
 }
 
+// -- Actions CRUD (item: get/update/delete by actionId alone) --
+
 export async function getAction(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
-  const action = await requireAction(workspaceId, actionId);
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
+  const action = await requireAction(actionId, c.get("userId"), "action:read");
   const steps = await listSteps(actionId);
   return c.json({ ...action, steps });
 }
 
 export async function updateAction(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
   const input = c.req.valid("json" as never) as { name?: string; description?: string | null };
 
-  await requireAction(workspaceId, actionId);
+  await requireAction(actionId, c.get("userId"), "action:write");
   const [action] = await db
     .update(actions)
     .set({
@@ -176,24 +180,24 @@ export async function updateAction(c: Context<AppEnv>) {
 }
 
 export async function deleteAction(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
-  await requireAction(workspaceId, actionId);
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
+  await requireAction(actionId, c.get("userId"), "action:delete");
   await db.delete(actions).where(eq(actions.id, actionId));
   return c.json({ message: "Action deleted" });
 }
 
-// -- Steps --
+// -- Steps (all keyed by actionId, no workspaceId in the path) --
 
 export async function createStep(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
   const input = c.req.valid("json" as never) as {
     resourceId: string;
     name: string;
     inputMapping?: Record<string, string>;
   };
 
-  await requireAction(workspaceId, actionId);
-  await assertHttpResourceInWorkspace(workspaceId, input.resourceId);
+  const action = await requireAction(actionId, c.get("userId"), "action:write");
+  await assertHttpResourceInWorkspace(action.workspaceId, input.resourceId);
   await assertStepNameAvailable(actionId, input.name);
 
   const [{ maxOrder }] = await db
@@ -218,10 +222,10 @@ export async function createStep(c: Context<AppEnv>) {
 
 // Registered before the `/:stepId` routes so "reorder" never matches as a step id.
 export async function reorderSteps(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
   const { stepIds } = c.req.valid("json" as never) as { stepIds: string[] };
 
-  await requireAction(workspaceId, actionId);
+  await requireAction(actionId, c.get("userId"), "action:write");
   const steps = await db.select({ id: actionSteps.id }).from(actionSteps).where(eq(actionSteps.actionId, actionId));
 
   const existingIds = new Set(steps.map((step) => step.id));
@@ -250,20 +254,16 @@ export async function reorderSteps(c: Context<AppEnv>) {
 }
 
 export async function updateStep(c: Context<AppEnv>) {
-  const { workspaceId, actionId, stepId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    actionId: string;
-    stepId: string;
-  };
+  const { actionId, stepId } = c.req.valid("param" as never) as { actionId: string; stepId: string };
   const input = c.req.valid("json" as never) as {
     resourceId?: string;
     name?: string;
     inputMapping?: Record<string, string> | null;
   };
 
-  await requireAction(workspaceId, actionId);
+  const action = await requireAction(actionId, c.get("userId"), "action:write");
   await requireStep(actionId, stepId);
-  if (input.resourceId !== undefined) await assertHttpResourceInWorkspace(workspaceId, input.resourceId);
+  if (input.resourceId !== undefined) await assertHttpResourceInWorkspace(action.workspaceId, input.resourceId);
   if (input.name !== undefined) await assertStepNameAvailable(actionId, input.name, stepId);
 
   const [step] = await db
@@ -281,13 +281,9 @@ export async function updateStep(c: Context<AppEnv>) {
 }
 
 export async function deleteStep(c: Context<AppEnv>) {
-  const { workspaceId, actionId, stepId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    actionId: string;
-    stepId: string;
-  };
+  const { actionId, stepId } = c.req.valid("param" as never) as { actionId: string; stepId: string };
 
-  await requireAction(workspaceId, actionId);
+  await requireAction(actionId, c.get("userId"), "action:write");
   const step = await requireStep(actionId, stepId);
   await db.delete(actionSteps).where(eq(actionSteps.id, stepId));
 
@@ -302,26 +298,26 @@ export async function deleteStep(c: Context<AppEnv>) {
   return c.json({ message: "Step deleted" });
 }
 
-// -- Execution & runs --
+// -- Execution & runs (keyed by actionId, no workspaceId in the path) --
 
 export async function executeAction(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
   const { variables } = c.req.valid("json" as never) as { variables?: Record<string, string> };
   const userId = c.get("userId");
 
-  await requireAction(workspaceId, actionId);
+  const action = await requireAction(actionId, userId, "action:execute");
   const steps = await listSteps(actionId);
   if (steps.length === 0) throw new AppError("Action has no steps to execute", 400);
 
-  const actionRun = await runActionSteps(workspaceId, actionId, userId, steps, variables ?? {});
-  return c.json(await getRunDetail(workspaceId, actionId, actionRun.id));
+  const actionRun = await runActionSteps(action.workspaceId, actionId, userId, steps, variables ?? {});
+  return c.json(await getRunDetail(actionId, actionRun.id));
 }
 
 export async function listActionRuns(c: Context<AppEnv>) {
-  const { workspaceId, actionId } = c.req.valid("param" as never) as { workspaceId: string; actionId: string };
+  const { actionId } = c.req.valid("param" as never) as { actionId: string };
   const { limit } = c.req.valid("query" as never) as { limit?: number };
 
-  await requireAction(workspaceId, actionId);
+  await requireAction(actionId, c.get("userId"), "action:read");
   const rows = await db
     .select()
     .from(actionRuns)
@@ -333,10 +329,7 @@ export async function listActionRuns(c: Context<AppEnv>) {
 }
 
 export async function getActionRun(c: Context<AppEnv>) {
-  const { workspaceId, actionId, actionRunId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    actionId: string;
-    actionRunId: string;
-  };
-  return c.json(await getRunDetail(workspaceId, actionId, actionRunId));
+  const { actionId, actionRunId } = c.req.valid("param" as never) as { actionId: string; actionRunId: string };
+  await requireAction(actionId, c.get("userId"), "action:read");
+  return c.json(await getRunDetail(actionId, actionRunId));
 }

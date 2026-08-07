@@ -3,9 +3,12 @@ import type { Context } from "hono";
 
 import { connections, connectionSecrets, type ConnectionConfig } from "../db/schema/connections";
 import { db } from "../lib/db";
+import { encryptSecret } from "../services/crypto";
 import type { AppEnv } from "../types/hono";
 import { AppError } from "../utils/errors";
-import { encryptSecret } from "../services/crypto";
+import { assertWorkspaceAccess } from "../utils/permissions";
+
+// -- collection (list/create — workspaceId comes from the path) --
 
 export async function listConnections(c: Context<AppEnv>) {
   const { workspaceId } = c.req.valid("param" as never) as { workspaceId: string };
@@ -40,11 +43,16 @@ export async function createConnection(c: Context<AppEnv>) {
   return c.json(connection, 201);
 }
 
+// -- item (get/update/delete by connectionId alone — workspaceId derived from the row) --
+
+async function requireConnectionWorkspaceId(connectionId: string): Promise<string> {
+  const [row] = await db.select({ workspaceId: connections.workspaceId }).from(connections).where(eq(connections.id, connectionId));
+  if (!row) throw new AppError("Connection not found", 404);
+  return row.workspaceId;
+}
+
 export async function getConnection(c: Context<AppEnv>) {
-  const { workspaceId, connectionId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    connectionId: string;
-  };
+  const { connectionId } = c.req.valid("param" as never) as { connectionId: string };
   const userId = c.get("userId");
 
   const [row] = await db
@@ -54,27 +62,29 @@ export async function getConnection(c: Context<AppEnv>) {
       connectionSecrets,
       and(eq(connectionSecrets.connectionId, connections.id), eq(connectionSecrets.userId, userId)),
     )
-    .where(and(eq(connections.id, connectionId), eq(connections.workspaceId, workspaceId)));
+    .where(eq(connections.id, connectionId));
 
   if (!row) throw new AppError("Connection not found", 404);
+  await assertWorkspaceAccess(userId, row.connection.workspaceId, "connection:read");
   return c.json({ ...row.connection, hasSecret: row.secretUserId !== null });
 }
 
 export async function updateConnection(c: Context<AppEnv>) {
-  const { workspaceId, connectionId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    connectionId: string;
-  };
+  const { connectionId } = c.req.valid("param" as never) as { connectionId: string };
   const { kind, name, config } = c.req.valid("json" as never) as {
     kind: "http" | "firebase";
     name: string;
     config: ConnectionConfig;
   };
+  const userId = c.get("userId");
+
+  const workspaceId = await requireConnectionWorkspaceId(connectionId);
+  await assertWorkspaceAccess(userId, workspaceId, "connection:write");
 
   const [connection] = await db
     .update(connections)
     .set({ kind, name, config })
-    .where(and(eq(connections.id, connectionId), eq(connections.workspaceId, workspaceId)))
+    .where(eq(connections.id, connectionId))
     .returning();
 
   if (!connection) throw new AppError("Connection not found", 404);
@@ -82,16 +92,13 @@ export async function updateConnection(c: Context<AppEnv>) {
 }
 
 export async function deleteConnection(c: Context<AppEnv>) {
-  const { workspaceId, connectionId } = c.req.valid("param" as never) as {
-    workspaceId: string;
-    connectionId: string;
-  };
+  const { connectionId } = c.req.valid("param" as never) as { connectionId: string };
+  const userId = c.get("userId");
 
-  const [deleted] = await db
-    .delete(connections)
-    .where(and(eq(connections.id, connectionId), eq(connections.workspaceId, workspaceId)))
-    .returning();
+  const workspaceId = await requireConnectionWorkspaceId(connectionId);
+  await assertWorkspaceAccess(userId, workspaceId, "connection:delete");
 
+  const [deleted] = await db.delete(connections).where(eq(connections.id, connectionId)).returning();
   if (!deleted) throw new AppError("Connection not found", 404);
   return c.json({ message: "Connection deleted" });
 }
@@ -102,6 +109,9 @@ export async function setConnectionSecret(c: Context<AppEnv>) {
   const { connectionId } = c.req.valid("param" as never) as { connectionId: string };
   const { value } = c.req.valid("json" as never) as { value: string };
   const userId = c.get("userId");
+
+  const workspaceId = await requireConnectionWorkspaceId(connectionId);
+  await assertWorkspaceAccess(userId, workspaceId, "connection:read");
 
   const encrypted = encryptSecret(value);
   await db
@@ -118,6 +128,9 @@ export async function setConnectionSecret(c: Context<AppEnv>) {
 export async function deleteConnectionSecret(c: Context<AppEnv>) {
   const { connectionId } = c.req.valid("param" as never) as { connectionId: string };
   const userId = c.get("userId");
+
+  const workspaceId = await requireConnectionWorkspaceId(connectionId);
+  await assertWorkspaceAccess(userId, workspaceId, "connection:read");
 
   await db
     .delete(connectionSecrets)

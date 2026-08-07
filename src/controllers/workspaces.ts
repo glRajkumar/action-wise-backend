@@ -10,6 +10,7 @@ import { createWorkspaceWithOwner } from "../services/workspaces";
 import { inviteEmailSender } from "../services/invite-email";
 import type { AppEnv } from "../types/hono";
 import { AppError } from "../utils/errors";
+import { assertWorkspaceAccess } from "../utils/permissions";
 
 const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -178,21 +179,21 @@ export async function inviteToWorkspace(c: Context<AppEnv>) {
   return c.json(invite, 201);
 }
 
+// Item — inviteId alone identifies the row; workspaceId is derived from it.
 export async function revokeInvite(c: Context<AppEnv>) {
-  const { workspaceId, inviteId } = c.req.valid("param" as never) as { workspaceId: string; inviteId: string };
+  const { inviteId } = c.req.valid("param" as never) as { inviteId: string };
+  const userId = c.get("userId");
 
-  const [invite] = await db
+  const [invite] = await db.select().from(workspaceInvites).where(eq(workspaceInvites.id, inviteId));
+  if (!invite) throw new AppError("Invite not found", 404);
+  await assertWorkspaceAccess(userId, invite.workspaceId, "workspace:invite");
+
+  const [updated] = await db
     .update(workspaceInvites)
     .set({ status: "revoked" })
-    .where(
-      and(
-        eq(workspaceInvites.id, inviteId),
-        eq(workspaceInvites.workspaceId, workspaceId),
-        eq(workspaceInvites.status, "pending"),
-      ),
-    )
+    .where(and(eq(workspaceInvites.id, inviteId), eq(workspaceInvites.status, "pending")))
     .returning();
 
-  if (!invite) throw new AppError("Invite not found", 404);
+  if (!updated) throw new AppError("Invite not found", 404);
   return c.json({ message: "Invite revoked" });
 }

@@ -24,14 +24,14 @@ Origin: {{origin}}
 }
 
 
-### get action with steps
+### get action with steps (item route — actionId alone identifies it)
 @actionId = REPLACE_WITH_ACTION_ID
-GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+GET {{host}}/actions/{{actionId}}
 Origin: {{origin}}
 
 
 ### rename action
-PATCH {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+PATCH {{host}}/actions/{{actionId}}
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -41,7 +41,7 @@ Origin: {{origin}}
 
 
 ### add step 1 — no mapping
-POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+POST {{host}}/actions/{{actionId}}/steps
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -52,7 +52,7 @@ Origin: {{origin}}
 
 
 ### add step 2 — references step 1's response
-POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+POST {{host}}/actions/{{actionId}}/steps
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -67,7 +67,7 @@ Origin: {{origin}}
 
 ### update a step's mapping
 @stepId = REPLACE_WITH_STEP_ID
-PATCH {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/{{stepId}}
+PATCH {{host}}/actions/{{actionId}}/steps/{{stepId}}
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -79,7 +79,7 @@ Origin: {{origin}}
 
 
 ### reorder steps (must list every step id exactly once)
-PUT {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/reorder
+PUT {{host}}/actions/{{actionId}}/steps/reorder
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -89,12 +89,12 @@ Origin: {{origin}}
 
 
 ### delete a step
-DELETE {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps/{{stepId}}
+DELETE {{host}}/actions/{{actionId}}/steps/{{stepId}}
 Origin: {{origin}}
 
 
 ### execute — sequential, per-step run rows, stops on first failure
-POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/execute
+POST {{host}}/actions/{{actionId}}/execute
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -104,23 +104,24 @@ Origin: {{origin}}
 
 
 ### list runs of this action
-GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/runs?limit=10
+GET {{host}}/actions/{{actionId}}/runs?limit=10
 Origin: {{origin}}
 
 
 ### get one run's timeline (per-step runs, ordered)
 @actionRunId = REPLACE_WITH_ACTION_RUN_ID
-GET {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/runs/{{actionRunId}}
+GET {{host}}/actions/{{actionId}}/runs/{{actionRunId}}
 Origin: {{origin}}
 
 
-### workspace-wide run history (section D/E consumer)
+### workspace-wide run history (section D/E consumer) — collection, stays
+### under /workspaces/:workspaceId
 GET {{host}}/workspaces/{{workspaceId}}/runs?limit=20
 Origin: {{origin}}
 
 
 ### negative: firebase resource as a step (expect 400)
-POST {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}/steps
+POST {{host}}/actions/{{actionId}}/steps
 Content-Type: application/json
 Origin: {{origin}}
 
@@ -131,5 +132,5 @@ Origin: {{origin}}
 
 
 ### delete action
-DELETE {{host}}/workspaces/{{workspaceId}}/actions/{{actionId}}
+DELETE {{host}}/actions/{{actionId}}
 Origin: {{origin}}

@@ -15,7 +15,6 @@ export const updateActionSchema = z
   });
 
 export const actionParamSchema = z.object({
-  workspaceId: z.uuid(),
   actionId: z.uuid(),
 });
 

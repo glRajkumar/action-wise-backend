@@ -31,8 +31,9 @@ import {
 } from "../validations/actions";
 import { workspaceIdParamSchema } from "../validations/workspaces";
 
-export const actionsRouter = new Hono<AppEnv>()
-  // -- actions --
+// Collection — mounted under /workspaces/:workspaceId/actions, workspaceId
+// says which workspace's actions to list/create in.
+export const actionsCollectionRouter = new Hono<AppEnv>()
   .get(
     "/:workspaceId/actions",
     zv("param", workspaceIdParamSchema),
@@ -46,83 +47,61 @@ export const actionsRouter = new Hono<AppEnv>()
     requireWorkspaceAccess("action:write"),
     zv("json", createActionSchema),
     createAction,
-  )
+  );
 
-  .get(
-    "/:workspaceId/actions/:actionId",
-    zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:read"),
-    getAction,
-  )
+// Item — mounted flat at /actions. actionId (+stepId/actionRunId) alone
+// identify the row; each controller derives workspaceId from it and calls
+// assertWorkspaceAccess itself.
+export const actionItemsRouter = new Hono<AppEnv>()
+  .get("/:actionId", zv("param", actionParamSchema), getAction)
 
   .patch(
-    "/:workspaceId/actions/:actionId",
+    "/:actionId",
     zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:write"),
     zv("json", updateActionSchema),
     updateAction,
   )
 
-  .delete(
-    "/:workspaceId/actions/:actionId",
-    zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:delete"),
-    deleteAction,
-  )
+  .delete("/:actionId", zv("param", actionParamSchema), deleteAction)
 
   // -- steps --
   .post(
-    "/:workspaceId/actions/:actionId/steps",
+    "/:actionId/steps",
     zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:write"),
     zv("json", createStepSchema),
     createStep,
   )
 
   // Registered before the `/:stepId` routes so "reorder" never matches as a step id.
   .put(
-    "/:workspaceId/actions/:actionId/steps/reorder",
+    "/:actionId/steps/reorder",
     zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:write"),
     zv("json", reorderStepsSchema),
     reorderSteps,
   )
 
   .patch(
-    "/:workspaceId/actions/:actionId/steps/:stepId",
+    "/:actionId/steps/:stepId",
     zv("param", stepParamSchema),
-    requireWorkspaceAccess("action:write"),
     zv("json", updateStepSchema),
     updateStep,
   )
 
-  .delete(
-    "/:workspaceId/actions/:actionId/steps/:stepId",
-    zv("param", stepParamSchema),
-    requireWorkspaceAccess("action:write"),
-    deleteStep,
-  )
+  .delete("/:actionId/steps/:stepId", zv("param", stepParamSchema), deleteStep)
 
   // -- execution & runs --
   .post(
-    "/:workspaceId/actions/:actionId/execute",
+    "/:actionId/execute",
     zv("param", actionParamSchema),
-    requireWorkspaceAccess("action:execute"),
     zv("json", executeActionSchema),
     executeAction,
   )
 
   .get(
-    "/:workspaceId/actions/:actionId/runs",
+    "/:actionId/runs",
     zv("param", actionParamSchema),
     zv("query", listActionRunsQuerySchema),
-    requireWorkspaceAccess("action:read"),
     listActionRuns,
   )
 
-  .get(
-    "/:workspaceId/actions/:actionId/runs/:actionRunId",
-    zv("param", actionRunParamSchema),
-    requireWorkspaceAccess("action:read"),
-    getActionRun,
-  );
+  .get("/:actionId/runs/:actionRunId", zv("param", actionRunParamSchema), getActionRun);

@@ -9,6 +9,8 @@ import { executeHttpResourceRun, type HttpResourceConfig } from "../services/exe
 import { createResourceRow, type ResourceInput } from "../services/resources";
 import type { AppEnv } from "../types/hono";
 import { AppError } from "../utils/errors";
+import { assertWorkspaceAccess } from "../utils/permissions";
+import type { WorkspaceAction } from "../utils/permissions";
 
 type RenderMode = "json_tree" | "table" | "raw" | "big_number";
 type TileLayout = { x: number; y: number; w: number; h: number };
@@ -21,38 +23,33 @@ type HttpAdhocConfig = {
   payloadTemplate?: unknown;
 };
 
-async function requireBoard(workspaceId: string, boardId: string, userId: string) {
+// Boards/tiles are owned by (workspaceId, userId) — Playground is a personal
+// scratchpad. workspaceId is derived from the board/tile row itself since
+// item routes no longer carry it in the path; assertWorkspaceAccess still
+// re-checks membership every request (catches access revoked after the row
+// was created).
+async function requireBoard(boardId: string, userId: string, action: WorkspaceAction) {
   const [board] = await db
     .select()
     .from(playgroundBoards)
-    .where(
-      and(
-        eq(playgroundBoards.id, boardId),
-        eq(playgroundBoards.workspaceId, workspaceId),
-        eq(playgroundBoards.userId, userId),
-      ),
-    );
+    .where(and(eq(playgroundBoards.id, boardId), eq(playgroundBoards.userId, userId)));
   if (!board) throw new AppError("Board not found", 404);
+  await assertWorkspaceAccess(userId, board.workspaceId, action);
   return board;
 }
 
-async function requireTile(workspaceId: string, tileId: string, userId: string) {
+async function requireTile(tileId: string, userId: string, action: WorkspaceAction) {
   const [row] = await db
-    .select({ tile: playgroundTiles, board: playgroundBoards })
+    .select({ tile: playgroundTiles, workspaceId: playgroundBoards.workspaceId })
     .from(playgroundTiles)
     .innerJoin(playgroundBoards, eq(playgroundTiles.boardId, playgroundBoards.id))
-    .where(
-      and(
-        eq(playgroundTiles.id, tileId),
-        eq(playgroundBoards.workspaceId, workspaceId),
-        eq(playgroundBoards.userId, userId),
-      ),
-    );
+    .where(and(eq(playgroundTiles.id, tileId), eq(playgroundBoards.userId, userId)));
   if (!row) throw new AppError("Tile not found", 404);
-  return row.tile;
+  await assertWorkspaceAccess(userId, row.workspaceId, action);
+  return { ...row.tile, workspaceId: row.workspaceId };
 }
 
-// -- Boards --
+// -- Boards (collection: list/create — workspaceId from the path) --
 
 export async function listBoards(c: Context<AppEnv>) {
   const { workspaceId } = c.req.valid("param" as never) as { workspaceId: string };
@@ -78,16 +75,18 @@ export async function createBoard(c: Context<AppEnv>) {
   return c.json(board, 201);
 }
 
+// -- Boards (item: get/update/delete by boardId alone) --
+
 export async function getBoard(c: Context<AppEnv>) {
-  const { workspaceId, boardId } = c.req.valid("param" as never) as { workspaceId: string; boardId: string };
-  const board = await requireBoard(workspaceId, boardId, c.get("userId"));
+  const { boardId } = c.req.valid("param" as never) as { boardId: string };
+  const board = await requireBoard(boardId, c.get("userId"), "workspace:read");
   return c.json(board);
 }
 
 export async function updateBoard(c: Context<AppEnv>) {
-  const { workspaceId, boardId } = c.req.valid("param" as never) as { workspaceId: string; boardId: string };
+  const { boardId } = c.req.valid("param" as never) as { boardId: string };
   const { name } = c.req.valid("json" as never) as { name: string };
-  await requireBoard(workspaceId, boardId, c.get("userId"));
+  await requireBoard(boardId, c.get("userId"), "workspace:read");
 
   const [board] = await db.update(playgroundBoards).set({ name }).where(eq(playgroundBoards.id, boardId)).returning();
   if (!board) throw new AppError("Board not found", 404);
@@ -95,36 +94,36 @@ export async function updateBoard(c: Context<AppEnv>) {
 }
 
 export async function deleteBoard(c: Context<AppEnv>) {
-  const { workspaceId, boardId } = c.req.valid("param" as never) as { workspaceId: string; boardId: string };
-  await requireBoard(workspaceId, boardId, c.get("userId"));
+  const { boardId } = c.req.valid("param" as never) as { boardId: string };
+  await requireBoard(boardId, c.get("userId"), "workspace:read");
   await db.delete(playgroundBoards).where(eq(playgroundBoards.id, boardId));
   return c.json({ message: "Board deleted" });
 }
 
-// -- Tiles --
+// -- Tiles (nested collection: list/create under a boardId) --
 
 export async function listTiles(c: Context<AppEnv>) {
-  const { workspaceId, boardId } = c.req.valid("param" as never) as { workspaceId: string; boardId: string };
-  await requireBoard(workspaceId, boardId, c.get("userId"));
+  const { boardId } = c.req.valid("param" as never) as { boardId: string };
+  await requireBoard(boardId, c.get("userId"), "workspace:read");
   const rows = await db.select().from(playgroundTiles).where(eq(playgroundTiles.boardId, boardId));
   return c.json(rows);
 }
 
 export async function createTile(c: Context<AppEnv>) {
-  const { workspaceId, boardId } = c.req.valid("param" as never) as { workspaceId: string; boardId: string };
+  const { boardId } = c.req.valid("param" as never) as { boardId: string };
   const input = c.req.valid("json" as never) as {
     resourceId?: string;
     adhocConfig?: Record<string, unknown>;
     layout: TileLayout;
     renderMode: RenderMode;
   };
-  await requireBoard(workspaceId, boardId, c.get("userId"));
+  const board = await requireBoard(boardId, c.get("userId"), "workspace:read");
 
   if (input.resourceId) {
     const [resource] = await db
       .select({ id: resources.id })
       .from(resources)
-      .where(and(eq(resources.id, input.resourceId), eq(resources.workspaceId, workspaceId)));
+      .where(and(eq(resources.id, input.resourceId), eq(resources.workspaceId, board.workspaceId)));
     if (!resource) throw new AppError("Resource not found in this workspace", 400);
   }
 
@@ -143,14 +142,16 @@ export async function createTile(c: Context<AppEnv>) {
   return c.json(tile, 201);
 }
 
+// -- Tiles (item: update/delete/execute/runs/promote by tileId alone) --
+
 export async function updateTile(c: Context<AppEnv>) {
-  const { workspaceId, tileId } = c.req.valid("param" as never) as { workspaceId: string; tileId: string };
+  const { tileId } = c.req.valid("param" as never) as { tileId: string };
   const input = c.req.valid("json" as never) as {
     layout?: TileLayout;
     renderMode?: RenderMode;
     adhocConfig?: Record<string, unknown>;
   };
-  const tile = await requireTile(workspaceId, tileId, c.get("userId"));
+  const tile = await requireTile(tileId, c.get("userId"), "workspace:read");
 
   if (input.adhocConfig !== undefined && tile.resourceId) {
     throw new AppError("Cannot set adhocConfig on a tile that already wraps a saved resource", 400);
@@ -171,23 +172,22 @@ export async function updateTile(c: Context<AppEnv>) {
 }
 
 export async function deleteTile(c: Context<AppEnv>) {
-  const { workspaceId, tileId } = c.req.valid("param" as never) as { workspaceId: string; tileId: string };
-  await requireTile(workspaceId, tileId, c.get("userId"));
+  const { tileId } = c.req.valid("param" as never) as { tileId: string };
+  await requireTile(tileId, c.get("userId"), "workspace:read");
   await db.delete(playgroundTiles).where(eq(playgroundTiles.id, tileId));
   return c.json({ message: "Tile deleted" });
 }
-
-// -- Execution --
 
 // Server-proxied HTTP execution (handover D). Firebase tiles execute
 // client-side and are recorded via `logFirebaseRun` instead — see
 // ../../DECISIONS.md for why the two paths differ.
 export async function executeTile(c: Context<AppEnv>) {
-  const { workspaceId, tileId } = c.req.valid("param" as never) as { workspaceId: string; tileId: string };
+  const { tileId } = c.req.valid("param" as never) as { tileId: string };
   const { variables } = c.req.valid("json" as never) as { variables?: Record<string, string> };
   const userId = c.get("userId");
 
-  const tile = await requireTile(workspaceId, tileId, userId);
+  const tile = await requireTile(tileId, userId, "workspace:read");
+  const { workspaceId } = tile;
 
   let connectionId: string | undefined;
   let address: string;
@@ -228,7 +228,7 @@ export async function executeTile(c: Context<AppEnv>) {
 }
 
 export async function logFirebaseRun(c: Context<AppEnv>) {
-  const { workspaceId, tileId } = c.req.valid("param" as never) as { workspaceId: string; tileId: string };
+  const { tileId } = c.req.valid("param" as never) as { tileId: string };
   const input = c.req.valid("json" as never) as {
     request: unknown;
     response?: unknown;
@@ -237,12 +237,12 @@ export async function logFirebaseRun(c: Context<AppEnv>) {
   };
   const userId = c.get("userId");
 
-  const tile = await requireTile(workspaceId, tileId, userId);
+  const tile = await requireTile(tileId, userId, "workspace:read");
 
   const [run] = await db
     .insert(runs)
     .values({
-      workspaceId,
+      workspaceId: tile.workspaceId,
       resourceId: tile.resourceId,
       triggeredBy: userId,
       request: input.request,
@@ -260,7 +260,7 @@ export async function logFirebaseRun(c: Context<AppEnv>) {
 // -- Save to registry --
 
 export async function promoteTile(c: Context<AppEnv>) {
-  const { workspaceId, tileId } = c.req.valid("param" as never) as { workspaceId: string; tileId: string };
+  const { tileId } = c.req.valid("param" as never) as { tileId: string };
   const input = c.req.valid("json" as never) as {
     name: string;
     folderId?: string | null;
@@ -269,9 +269,11 @@ export async function promoteTile(c: Context<AppEnv>) {
   };
   const userId = c.get("userId");
 
-  const tile = await requireTile(workspaceId, tileId, userId);
+  const tile = await requireTile(tileId, userId, "resource:write");
   if (tile.resourceId) throw new AppError("Tile is already backed by a saved resource", 400);
   if (!tile.adhocConfig) throw new AppError("Tile has no ad-hoc config to save", 400);
+
+  const { workspaceId } = tile;
 
   const adhoc = tile.adhocConfig as {
     kind: "http" | "firebase_rtdb" | "firebase_firestore";

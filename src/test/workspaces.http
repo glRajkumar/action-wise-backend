@@ -73,16 +73,16 @@ Origin: {{origin}}
 }
 
 
-### revoke an invite
+### revoke an invite (top-level — inviteId alone identifies it)
 @inviteId = REPLACE_WITH_INVITE_ID
-DELETE {{host}}/workspaces/{{workspaceId}}/invites/{{inviteId}}
+DELETE {{host}}/invites/{{inviteId}}
 Origin: {{origin}}
 
 
 ### accept an invite (sign in as the invited user first — token is logged to
 ### the backend console by the stub invite-email sender)
 @inviteToken = REPLACE_WITH_TOKEN_FROM_CONSOLE
-POST {{host}}/workspaces/invites/{{inviteToken}}/accept
+POST {{host}}/invites/{{inviteToken}}/accept
 Origin: {{origin}}
 
 

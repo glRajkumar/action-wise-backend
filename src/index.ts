@@ -10,11 +10,11 @@ import { requireAuth } from './middlewares/auth'
 import { auth } from './lib/auth'
 import { env } from './utils/env'
 import { AppError } from './utils/errors'
-import { workspacesRouter } from './routes/workspaces'
-import { connectionsRouter } from './routes/connections'
-import { resourcesRouter } from './routes/resources'
-import { playgroundRouter } from './routes/playground'
-import { actionsRouter } from './routes/actions'
+import { workspacesRouter, inviteItemsRouter } from './routes/workspaces'
+import { connectionsCollectionRouter, connectionItemsRouter } from './routes/connections'
+import { resourcesCollectionRouter, resourceItemsRouter, folderItemsRouter } from './routes/resources'
+import { playgroundCollectionRouter, playgroundItemsRouter } from './routes/playground'
+import { actionsCollectionRouter, actionItemsRouter } from './routes/actions'
 import { runsRouter } from './routes/runs'
 
 const app = new Hono().basePath("/api")
@@ -31,10 +31,16 @@ app.on(["GET", "POST"], "/auth/*", c => auth.handler(c.req.raw))
 app.use(requireAuth)
 
 app.route('/workspaces', workspacesRouter)
-app.route('/workspaces', connectionsRouter)
-app.route('/workspaces', resourcesRouter)
-app.route('/workspaces', playgroundRouter)
-app.route('/workspaces', actionsRouter)
+app.route('/invites', inviteItemsRouter)
+app.route('/workspaces', connectionsCollectionRouter)
+app.route('/connections', connectionItemsRouter)
+app.route('/workspaces', resourcesCollectionRouter)
+app.route('/resources', resourceItemsRouter)
+app.route('/resource-folders', folderItemsRouter)
+app.route('/workspaces', playgroundCollectionRouter)
+app.route('/playground', playgroundItemsRouter)
+app.route('/workspaces', actionsCollectionRouter)
+app.route('/actions', actionItemsRouter)
 app.route('/workspaces', runsRouter)
 
 app.get('/', (c) => {
