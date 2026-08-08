@@ -1,4 +1,22 @@
-import { Hono } from "hono";
+import { Hono } from "hono"
+
+import { requireWorkspaceAccess } from "../middlewares/workspace-access"
+import { requireItemAccess } from "../middlewares/item-access"
+
+import {
+  actionParamSchema,
+  actionRunParamSchema,
+  createActionSchema,
+  createStepSchema,
+  executeActionSchema,
+  listActionRunsQuerySchema,
+  reorderStepsSchema,
+  stepParamSchema,
+  updateActionSchema,
+  updateStepSchema,
+} from "../validations/actions"
+import { workspaceIdParamSchema } from "../validations/workspaces"
+import { zv } from "../utils/validate"
 
 import {
   createAction,
@@ -11,97 +29,90 @@ import {
   listActionRuns,
   listActions,
   reorderSteps,
+  requireAction,
   updateAction,
   updateStep,
-} from "../controllers/actions";
-import { requireWorkspaceAccess } from "../middlewares/workspace-access";
-import type { AppEnv } from "../types/hono";
-import { zv } from "../utils/validate";
-import {
-  actionParamSchema,
-  actionRunParamSchema,
-  createActionSchema,
-  createStepSchema,
-  executeActionSchema,
-  listActionRunsQuerySchema,
-  reorderStepsSchema,
-  stepParamSchema,
-  updateActionSchema,
-  updateStepSchema,
-} from "../validations/actions";
-import { workspaceIdParamSchema } from "../validations/workspaces";
+} from "../controllers/actions"
 
-// Collection — mounted under /workspaces/:workspaceId/actions, workspaceId
-// says which workspace's actions to list/create in.
-export const actionsCollectionRouter = new Hono<AppEnv>()
+export const actionsCollectionRouter = new Hono()
   .get(
     "/:workspaceId/actions",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("action:read"),
     listActions,
   )
-
   .post(
     "/:workspaceId/actions",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("action:write"),
     zv("json", createActionSchema),
     createAction,
-  );
+  )
 
-// Item — mounted flat at /actions. actionId (+stepId/actionRunId) alone
-// identify the row; each controller derives workspaceId from it and calls
-// assertWorkspaceAccess itself.
-export const actionItemsRouter = new Hono<AppEnv>()
-  .get("/:actionId", zv("param", actionParamSchema), getAction)
-
+export const actionItemsRouter = new Hono()
+  .get(
+    "/:actionId",
+    zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:read"),
+    getAction,
+  )
   .patch(
     "/:actionId",
     zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:write"),
     zv("json", updateActionSchema),
     updateAction,
   )
-
-  .delete("/:actionId", zv("param", actionParamSchema), deleteAction)
-
-  // -- steps --
+  .delete(
+    "/:actionId",
+    zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:delete"),
+    deleteAction,
+  )
   .post(
     "/:actionId/steps",
     zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:write"),
     zv("json", createStepSchema),
     createStep,
   )
-
-  // Registered before the `/:stepId` routes so "reorder" never matches as a step id.
   .put(
     "/:actionId/steps/reorder",
     zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:write"),
     zv("json", reorderStepsSchema),
     reorderSteps,
   )
-
   .patch(
     "/:actionId/steps/:stepId",
     zv("param", stepParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:write"),
     zv("json", updateStepSchema),
     updateStep,
   )
-
-  .delete("/:actionId/steps/:stepId", zv("param", stepParamSchema), deleteStep)
-
-  // -- execution & runs --
+  .delete(
+    "/:actionId/steps/:stepId",
+    zv("param", stepParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:write"),
+    deleteStep,
+  )
   .post(
     "/:actionId/execute",
     zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:execute"),
     zv("json", executeActionSchema),
     executeAction,
   )
-
   .get(
     "/:actionId/runs",
     zv("param", actionParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:read"),
     zv("query", listActionRunsQuerySchema),
     listActionRuns,
   )
-
-  .get("/:actionId/runs/:actionRunId", zv("param", actionRunParamSchema), getActionRun);
+  .get(
+    "/:actionId/runs/:actionRunId",
+    zv("param", actionRunParamSchema),
+    requireItemAccess("actionId", "actionRow", requireAction, "action:read"),
+    getActionRun,
+  )

@@ -1,4 +1,9 @@
-import { Hono } from "hono";
+import { Hono } from "hono"
+
+import { requireWorkspaceAccess } from "../middlewares/workspace-access"
+import { requireItemAccess } from "../middlewares/item-access"
+
+import { zv } from "../utils/validate"
 
 import {
   createBoard,
@@ -11,12 +16,11 @@ import {
   listTiles,
   logFirebaseRun,
   promoteTile,
+  requireBoard,
+  requireTile,
   updateBoard,
   updateTile,
-} from "../controllers/playground";
-import { requireWorkspaceAccess } from "../middlewares/workspace-access";
-import type { AppEnv } from "../types/hono";
-import { zv } from "../utils/validate";
+} from "../controllers/playground"
 import {
   boardParamSchema,
   createBoardSchema,
@@ -27,80 +31,88 @@ import {
   tileParamSchema,
   updateBoardSchema,
   updateTileSchema,
-} from "../validations/playground";
-import { workspaceIdParamSchema } from "../validations/workspaces";
+} from "../validations/playground"
+import { workspaceIdParamSchema } from "../validations/workspaces"
 
-// Collection — mounted under /workspaces/:workspaceId/playground/boards,
-// workspaceId says which workspace's boards to list/create in.
-export const playgroundCollectionRouter = new Hono<AppEnv>()
+export const playgroundCollectionRouter = new Hono()
   .get(
     "/:workspaceId/playground/boards",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("workspace:read"),
     listBoards,
   )
-
   .post(
     "/:workspaceId/playground/boards",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("workspace:read"),
     zv("json", createBoardSchema),
     createBoard,
-  );
+  )
 
-// Item — mounted flat at /playground. boardId/tileId alone identify the row;
-// each controller derives workspaceId from it and calls assertWorkspaceAccess
-// itself. Playground is a personal scratchpad, gated on plain workspace
-// membership — only "save to registry" (promote) needs resource:write.
-export const playgroundItemsRouter = new Hono<AppEnv>()
-  .get("/boards/:boardId", zv("param", boardParamSchema), getBoard)
-
+export const playgroundItemsRouter = new Hono()
+  .get(
+    "/boards/:boardId",
+    zv("param", boardParamSchema),
+    requireItemAccess("boardId", "boardRow", requireBoard, "workspace:read"),
+    getBoard,
+  )
   .patch(
     "/boards/:boardId",
     zv("param", boardParamSchema),
+    requireItemAccess("boardId", "boardRow", requireBoard, "workspace:read"),
     zv("json", updateBoardSchema),
     updateBoard,
   )
-
-  .delete("/boards/:boardId", zv("param", boardParamSchema), deleteBoard)
-
-  .get("/boards/:boardId/tiles", zv("param", boardParamSchema), listTiles)
-
+  .delete(
+    "/boards/:boardId",
+    zv("param", boardParamSchema),
+    requireItemAccess("boardId", "boardRow", requireBoard, "workspace:read"),
+    deleteBoard,
+  )
+  .get(
+    "/boards/:boardId/tiles",
+    zv("param", boardParamSchema),
+    requireItemAccess("boardId", "boardRow", requireBoard, "workspace:read"),
+    listTiles,
+  )
   .post(
     "/boards/:boardId/tiles",
     zv("param", boardParamSchema),
+    requireItemAccess("boardId", "boardRow", requireBoard, "workspace:read"),
     zv("json", createTileSchema),
     createTile,
   )
-
   .patch(
     "/tiles/:tileId",
     zv("param", tileParamSchema),
+    requireItemAccess("tileId", "tileRow", requireTile, "workspace:read"),
     zv("json", updateTileSchema),
     updateTile,
   )
-
-  .delete("/tiles/:tileId", zv("param", tileParamSchema), deleteTile)
-
-  // Server-proxied execution — http tiles only. Firebase tiles run client-side
-  // and use POST .../runs below to record the result instead.
+  .delete(
+    "/tiles/:tileId",
+    zv("param", tileParamSchema),
+    requireItemAccess("tileId", "tileRow", requireTile, "workspace:read"),
+    deleteTile,
+  )
   .post(
     "/tiles/:tileId/execute",
     zv("param", tileParamSchema),
+    requireItemAccess("tileId", "tileRow", requireTile, "workspace:read"),
     zv("json", executeTileSchema),
     executeTile,
   )
-
   .post(
     "/tiles/:tileId/runs",
     zv("param", tileParamSchema),
+    requireItemAccess("tileId", "tileRow", requireTile, "workspace:read"),
     zv("json", logFirebaseRunSchema),
     logFirebaseRun,
   )
-
   .post(
     "/tiles/:tileId/promote",
     zv("param", tileParamSchema),
+    requireItemAccess("tileId", "tileRow", requireTile, "resource:write"),
     zv("json", promoteTileSchema),
     promoteTile,
-  );
+  )

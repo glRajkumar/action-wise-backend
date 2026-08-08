@@ -1,4 +1,9 @@
-import { Hono } from "hono";
+import { Hono } from "hono"
+
+import { requireWorkspaceAccess } from "../middlewares/workspace-access"
+import { requireItemAccess } from "../middlewares/item-access"
+
+import { zv } from "../utils/validate"
 
 import {
   acceptWorkspaceInvite,
@@ -11,12 +16,10 @@ import {
   listWorkspaces,
   removeMember,
   renameWorkspace,
+  requireInviteRow,
   revokeInvite,
   updateMemberRole,
-} from "../controllers/workspaces";
-import { requireWorkspaceAccess } from "../middlewares/workspace-access";
-import type { AppEnv } from "../types/hono";
-import { zv } from "../utils/validate";
+} from "../controllers/workspaces"
 import {
   acceptInviteParamSchema,
   createInviteSchema,
@@ -26,9 +29,9 @@ import {
   updateMemberRoleSchema,
   updateWorkspaceSchema,
   workspaceIdParamSchema,
-} from "../validations/workspaces";
+} from "../validations/workspaces"
 
-export const workspacesRouter = new Hono<AppEnv>()
+export const workspacesRouter = new Hono()
   .get("/", listWorkspaces)
   .post("/", zv("json", createWorkspaceSchema), createWorkspace)
   .get(
@@ -81,8 +84,13 @@ export const workspacesRouter = new Hono<AppEnv>()
     requireWorkspaceAccess("workspace:invite"),
     zv("json", createInviteSchema),
     inviteToWorkspace,
-  );
+  )
 
-export const inviteItemsRouter = new Hono<AppEnv>()
+export const inviteItemsRouter = new Hono()
   .post("/:token/accept", zv("param", acceptInviteParamSchema), acceptWorkspaceInvite)
-  .delete("/:inviteId", zv("param", inviteParamSchema), revokeInvite);
+  .delete(
+    "/:inviteId",
+    zv("param", inviteParamSchema),
+    requireItemAccess("inviteId", "inviteRow", requireInviteRow, "workspace:invite"),
+    revokeInvite,
+  )

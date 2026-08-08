@@ -15,8 +15,6 @@ export type ActionStepForExecution = {
   resource: { kind: string };
 };
 
-// -- Step reference resolution --
-
 const TEMPLATE_PATTERN = /\{\{\s*([\w.]+)\s*\}\}/g;
 const SINGLE_REF_PATTERN = /^\{\{\s*([\w.]+)\s*\}\}$/;
 
@@ -71,8 +69,6 @@ function resolveStepRef(template: string, ctx: StepContext, stepName: string): s
   if (single?.[1]) return stringifyRef(resolveKey(single[1]));
   return template.replace(TEMPLATE_PATTERN, (_match, key: string) => stringifyRef(resolveKey(key)));
 }
-
-// -- Execution --
 
 // The sequential multi-step executor for Actions (handover G). Kept in
 // services/ (not inlined into the controller) even with a single caller —

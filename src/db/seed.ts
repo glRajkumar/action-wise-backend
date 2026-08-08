@@ -65,7 +65,6 @@ async function main() {
 
   console.log(`Seeding demo data for ${user.email}...`);
 
-  // -- workspace + membership --
   const [workspace] = await db
     .insert(workspaces)
     .values({ name: DEMO_WORKSPACE_NAME, createdBy: user.id })
@@ -73,7 +72,6 @@ async function main() {
   if (!workspace) throw new Error("Failed to insert workspace");
   await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: user.id, role: "owner" });
 
-  // -- connections --
   const [httpConnection] = await db
     .insert(connections)
     .values({
@@ -100,7 +98,6 @@ async function main() {
     .returning();
   if (!httpConnection || !firebaseConnection) throw new Error("Failed to insert connections");
 
-  // -- folders --
   const [usersFolder] = await db
     .insert(resourceFolders)
     .values({ workspaceId: workspace.id, name: "Users API", createdBy: user.id })
@@ -116,7 +113,6 @@ async function main() {
     .returning();
   if (!postsFolder) throw new Error("Failed to insert nested folder");
 
-  // -- resources --
   const [listUsers] = await db
     .insert(resources)
     .values({
@@ -210,7 +206,6 @@ async function main() {
     throw new Error("Failed to insert resources");
   }
 
-  // -- runs (history for Beautify/type-inference/faker demos) --
   const dayMs = 24 * 60 * 60 * 1000;
   const now = Date.now();
 
@@ -270,7 +265,6 @@ async function main() {
     executedAt: new Date(now - 5 * dayMs),
   });
 
-  // -- playground board + tiles --
   const [board] = await db
     .insert(playgroundBoards)
     .values({ workspaceId: workspace.id, userId: user.id, name: "Demo Board" })
@@ -313,7 +307,6 @@ async function main() {
     },
   ]);
 
-  // -- action with chained steps + one completed run --
   const [demoAction] = await db
     .insert(actions)
     .values({

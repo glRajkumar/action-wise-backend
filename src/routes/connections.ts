@@ -1,4 +1,9 @@
-import { Hono } from "hono";
+import { Hono } from "hono"
+
+import { requireWorkspaceAccess } from "../middlewares/workspace-access"
+import { requireItemAccess } from "../middlewares/item-access"
+
+import { zv } from "../utils/validate"
 
 import {
   createConnection,
@@ -6,55 +11,63 @@ import {
   deleteConnectionSecret,
   getConnection,
   listConnections,
+  requireConnectionRow,
   setConnectionSecret,
   updateConnection,
-} from "../controllers/connections";
-import { requireWorkspaceAccess } from "../middlewares/workspace-access";
-import type { AppEnv } from "../types/hono";
-import { zv } from "../utils/validate";
-import { connectionParamSchema, createConnectionSchema, setConnectionSecretSchema, updateConnectionSchema } from "../validations/connections";
-import { workspaceIdParamSchema } from "../validations/workspaces";
+} from "../controllers/connections"
+import {
+  connectionParamSchema,
+  createConnectionSchema,
+  setConnectionSecretSchema,
+  updateConnectionSchema,
+} from "../validations/connections"
+import { workspaceIdParamSchema } from "../validations/workspaces"
 
-// Collection — mounted under /workspaces/:workspaceId/connections, workspaceId
-// says which workspace's connections to list/create in.
-export const connectionsCollectionRouter = new Hono<AppEnv>()
+export const connectionsCollectionRouter = new Hono()
   .get(
     "/:workspaceId/connections",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("connection:read"),
     listConnections,
   )
-
   .post(
     "/:workspaceId/connections",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("connection:write"),
     zv("json", createConnectionSchema),
     createConnection,
-  );
+  )
 
-// Item — mounted flat at /connections/:connectionId. connectionId alone
-// identifies the row; each controller derives workspaceId from it and calls
-// assertWorkspaceAccess itself instead of a path-driven middleware.
-export const connectionItemsRouter = new Hono<AppEnv>()
-  .get("/:connectionId", zv("param", connectionParamSchema), getConnection)
-
+export const connectionItemsRouter = new Hono()
+  .get(
+    "/:connectionId",
+    zv("param", connectionParamSchema),
+    requireItemAccess("connectionId", "connectionRow", requireConnectionRow, "connection:read"),
+    getConnection,
+  )
   .patch(
     "/:connectionId",
     zv("param", connectionParamSchema),
+    requireItemAccess("connectionId", "connectionRow", requireConnectionRow, "connection:write"),
     zv("json", updateConnectionSchema),
     updateConnection,
   )
-
-  .delete("/:connectionId", zv("param", connectionParamSchema), deleteConnection)
-
-  // Setting/removing YOUR OWN secret only requires being able to see the
-  // connection, not full write access — it doesn't change the shared config.
+  .delete(
+    "/:connectionId",
+    zv("param", connectionParamSchema),
+    requireItemAccess("connectionId", "connectionRow", requireConnectionRow, "connection:delete"),
+    deleteConnection,
+  )
   .put(
     "/:connectionId/secret",
     zv("param", connectionParamSchema),
+    requireItemAccess("connectionId", "connectionRow", requireConnectionRow, "connection:read"),
     zv("json", setConnectionSecretSchema),
     setConnectionSecret,
   )
-
-  .delete("/:connectionId/secret", zv("param", connectionParamSchema), deleteConnectionSecret);
+  .delete(
+    "/:connectionId/secret",
+    zv("param", connectionParamSchema),
+    requireItemAccess("connectionId", "connectionRow", requireConnectionRow, "connection:read"),
+    deleteConnectionSecret,
+  )

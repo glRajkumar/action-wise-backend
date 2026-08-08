@@ -1,18 +1,13 @@
-import { relations, sql } from "drizzle-orm";
-import { check, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm"
+import { check, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 
-import { actionRuns, actionSteps } from "./actions";
-import { users } from "./auth";
-import { idColumn } from "./columns.helpers";
-import { RUN_STATUSES } from "./enums";
-import { resources } from "./resources";
-import { workspaces } from "./workspaces";
+import { actionRuns, actionSteps } from "./actions"
+import { RUN_STATUSES } from "./enums"
+import { workspaces } from "./workspaces"
+import { resources } from "./resources"
+import { idColumn } from "./columns.helpers"
+import { users } from "./auth"
 
-// One recorded execution of a Resource (standalone, from the Playground) or of an
-// Action's step (stepId + actionRunId set). resourceId is nullable because
-// Playground items can be run before ever being saved to the registry — the
-// request/response snapshot in `request`/`response` is the record either way.
-// Auth headers are redacted before this row is written (see DECISIONS.md).
 export const runs = pgTable(
   "runs",
   {
@@ -34,7 +29,7 @@ export const runs = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [check("runs_status_check", sql`${table.status} in ('pending','success','error')`)],
-);
+)
 
 export const runsRelations = relations(runs, ({ one }) => ({
   workspace: one(workspaces, { fields: [runs.workspaceId], references: [workspaces.id] }),
@@ -42,4 +37,4 @@ export const runsRelations = relations(runs, ({ one }) => ({
   step: one(actionSteps, { fields: [runs.stepId], references: [actionSteps.id] }),
   actionRun: one(actionRuns, { fields: [runs.actionRunId], references: [actionRuns.id] }),
   triggeredByUser: one(users, { fields: [runs.triggeredBy], references: [users.id] }),
-}));
+}))

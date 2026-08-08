@@ -1,5 +1,5 @@
-import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm"
+import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -12,7 +12,7 @@ export const users = pgTable("users", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-});
+})
 
 export const accounts = pgTable(
   "accounts",
@@ -36,15 +36,15 @@ export const accounts = pgTable(
       .notNull(),
   },
   (table) => [index("accounts_userId_idx").on(table.userId)],
-);
+)
 
 export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
-}));
+}))
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
   users: one(users, {
     fields: [accounts.userId],
     references: [users.id],
   }),
-}));
+}))

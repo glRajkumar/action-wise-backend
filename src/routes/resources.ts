@@ -1,4 +1,12 @@
-import { Hono } from "hono";
+import { Hono } from "hono"
+
+import { requireWorkspaceAccess } from "../middlewares/workspace-access"
+import { requireItemAccess } from "../middlewares/item-access"
+
+import { zv } from "../utils/validate"
+
+import { workspaceIdParamSchema } from "../validations/workspaces"
+import { generateFakeDataSchema } from "../validations/beautify"
 
 import {
   createFolder,
@@ -10,13 +18,11 @@ import {
   getResource,
   listFolders,
   listResources,
+  requireFolderRow,
+  requireResource,
   updateFolder,
   updateResource,
-} from "../controllers/resources";
-import { requireWorkspaceAccess } from "../middlewares/workspace-access";
-import type { AppEnv } from "../types/hono";
-import { zv } from "../utils/validate";
-import { generateFakeDataSchema } from "../validations/beautify";
+} from "../controllers/resources"
 import {
   createFolderSchema,
   createResourceSchema,
@@ -25,19 +31,15 @@ import {
   resourceParamSchema,
   updateFolderSchema,
   updateResourceSchema,
-} from "../validations/resources";
-import { workspaceIdParamSchema } from "../validations/workspaces";
+} from "../validations/resources"
 
-// Collection — mounted under /workspaces/:workspaceId/..., workspaceId says
-// which workspace's folders/resources to list/create in.
-export const resourcesCollectionRouter = new Hono<AppEnv>()
+export const resourcesCollectionRouter = new Hono()
   .get(
     "/:workspaceId/resource-folders",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("resource:read"),
     listFolders,
   )
-
   .post(
     "/:workspaceId/resource-folders",
     zv("param", workspaceIdParamSchema),
@@ -45,57 +47,66 @@ export const resourcesCollectionRouter = new Hono<AppEnv>()
     zv("json", createFolderSchema),
     createFolder,
   )
-
   .get(
     "/:workspaceId/resources",
     zv("param", workspaceIdParamSchema),
-    zv("query", listResourcesQuerySchema),
     requireWorkspaceAccess("resource:read"),
+    zv("query", listResourcesQuerySchema),
     listResources,
   )
-
   .post(
     "/:workspaceId/resources",
     zv("param", workspaceIdParamSchema),
     requireWorkspaceAccess("resource:write"),
     zv("json", createResourceSchema),
     createResource,
-  );
+  )
 
-// Item — mounted flat, folderId/resourceId alone identify the row; each
-// controller derives workspaceId from it and calls assertWorkspaceAccess itself.
-export const resourceItemsRouter = new Hono<AppEnv>()
+export const resourceItemsRouter = new Hono()
   .get(
     "/:resourceId",
     zv("param", resourceParamSchema),
+    requireItemAccess("resourceId", "resourceRow", requireResource, "resource:read"),
     getResource,
   )
-
   .patch(
     "/:resourceId",
     zv("param", resourceParamSchema),
+    requireItemAccess("resourceId", "resourceRow", requireResource, "resource:write"),
     zv("json", updateResourceSchema),
     updateResource,
   )
-
-  .delete("/:resourceId", zv("param", resourceParamSchema), deleteResource)
-
-  // -- beautify / faker (handover E/F) --
-  .get("/:resourceId/export-type", zv("param", resourceParamSchema), exportResourceType)
-
+  .delete(
+    "/:resourceId",
+    zv("param", resourceParamSchema),
+    requireItemAccess("resourceId", "resourceRow", requireResource, "resource:delete"),
+    deleteResource,
+  )
+  .get(
+    "/:resourceId/export-type",
+    zv("param", resourceParamSchema),
+    requireItemAccess("resourceId", "resourceRow", requireResource, "resource:read"),
+    exportResourceType,
+  )
   .post(
     "/:resourceId/fake-data",
     zv("param", resourceParamSchema),
+    requireItemAccess("resourceId", "resourceRow", requireResource, "resource:read"),
     zv("json", generateFakeDataSchema),
     generateFakeData,
-  );
+  )
 
-export const folderItemsRouter = new Hono<AppEnv>()
+export const folderItemsRouter = new Hono()
   .patch(
     "/:folderId",
     zv("param", folderParamSchema),
+    requireItemAccess("folderId", "folderRow", requireFolderRow, "resource:write"),
     zv("json", updateFolderSchema),
     updateFolder,
   )
-
-  .delete("/:folderId", zv("param", folderParamSchema), deleteFolder);
+  .delete(
+    "/:folderId",
+    zv("param", folderParamSchema),
+    requireItemAccess("folderId", "folderRow", requireFolderRow, "resource:delete"),
+    deleteFolder,
+  )
