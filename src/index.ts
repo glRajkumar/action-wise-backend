@@ -7,14 +7,15 @@ import { cors } from 'hono/cors'
 import { Hono } from 'hono'
 
 import { requireAuth } from './middlewares/auth'
+import { AppError } from './utils/errors'
 import { auth } from './lib/auth'
 import { env } from './utils/env'
-import { AppError } from './utils/errors'
-import { workspacesRouter, inviteItemsRouter } from './routes/workspaces'
-import { connectionsCollectionRouter, connectionItemsRouter } from './routes/connections'
+
 import { resourcesCollectionRouter, resourceItemsRouter, folderItemsRouter } from './routes/resources'
+import { connectionsCollectionRouter, connectionItemsRouter } from './routes/connections'
 import { playgroundCollectionRouter, playgroundItemsRouter } from './routes/playground'
 import { actionsCollectionRouter, actionItemsRouter } from './routes/actions'
+import { workspacesRouter, inviteItemsRouter } from './routes/workspaces'
 import { runsRouter } from './routes/runs'
 
 const app = new Hono().basePath("/api")
@@ -44,7 +45,7 @@ app.route('/actions', actionItemsRouter)
 app.route('/workspaces', runsRouter)
 
 app.get('/', (c) => {
-  return c.text('Hello Hono!')
+  return c.text('Action Wise is running!')
 })
 
 app.notFound(c => c.json({ message: 'Route not found' }, 404))
