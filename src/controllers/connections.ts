@@ -5,6 +5,7 @@ import type { zContext } from "../types/hono"
 import { encryptSecret } from "../services/crypto"
 
 import { connections, connectionSecrets } from "../db/schema/connections"
+import { workspaceMembers } from "../db/schema/workspaces"
 import { db } from "../lib/db"
 
 import { AppError } from "../utils/errors"
@@ -46,27 +47,29 @@ export async function createConnection(c: zContext<{ param: typeof workspaceIdPa
   return c.json(connection, 201)
 }
 
-export async function requireConnectionRow(connectionId: string) {
-  const [row] = await db.select().from(connections).where(eq(connections.id, connectionId))
+export async function requireConnectionRow(connectionId: string, userId: string) {
+  const [row] = await db
+    .select({ connection: connections, role: workspaceMembers.role })
+    .from(connections)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, connections.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
+    .where(eq(connections.id, connectionId))
   if (!row) throw new AppError("Connection not found", 404)
-  return row
+  return { ...row.connection, role: row.role }
 }
 
 export async function getConnection(c: zContext<{ param: typeof connectionParamSchema }>) {
-  const { connectionId } = c.req.valid("param")
   const userId = c.get("userId")
+  const connectionRow = c.get("connectionRow")
 
-  const [row] = await db
-    .select({ connection: connections, secretUserId: connectionSecrets.userId })
-    .from(connections)
-    .leftJoin(
-      connectionSecrets,
-      and(eq(connectionSecrets.connectionId, connections.id), eq(connectionSecrets.userId, userId)),
-    )
-    .where(eq(connections.id, connectionId))
+  const [secret] = await db
+    .select({ userId: connectionSecrets.userId })
+    .from(connectionSecrets)
+    .where(and(eq(connectionSecrets.connectionId, connectionRow.id), eq(connectionSecrets.userId, userId)))
 
-  if (!row) throw new AppError("Connection not found", 404)
-  return c.json({ ...row.connection, hasSecret: row.secretUserId !== null })
+  return c.json({ ...connectionRow, hasSecret: secret !== undefined })
 }
 
 export async function updateConnection(c: zContext<{ param: typeof connectionParamSchema; json: typeof updateConnectionSchema }>) {

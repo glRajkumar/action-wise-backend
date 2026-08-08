@@ -14,6 +14,7 @@ import {
 } from "../services/beautify"
 
 import { resourceFolders, resources } from "../db/schema/resources"
+import { workspaceMembers } from "../db/schema/workspaces"
 import { db } from "../lib/db"
 
 import { AppError } from "../utils/errors"
@@ -52,10 +53,17 @@ export async function createFolder(c: zContext<{ param: typeof workspaceIdParamS
   return c.json(folder, 201)
 }
 
-export async function requireFolderRow(folderId: string) {
-  const [row] = await db.select().from(resourceFolders).where(eq(resourceFolders.id, folderId))
+export async function requireFolderRow(folderId: string, userId: string) {
+  const [row] = await db
+    .select({ folder: resourceFolders, role: workspaceMembers.role })
+    .from(resourceFolders)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, resourceFolders.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
+    .where(eq(resourceFolders.id, folderId))
   if (!row) throw new AppError("Folder not found", 404)
-  return row
+  return { ...row.folder, role: row.role }
 }
 
 export async function updateFolder(c: zContext<{ param: typeof folderParamSchema; json: typeof updateFolderSchema }>) {
@@ -110,10 +118,17 @@ export async function createResource(c: zContext<{ param: typeof workspaceIdPara
   return c.json(resource, 201)
 }
 
-export async function requireResource(resourceId: string) {
-  const [resource] = await db.select().from(resources).where(eq(resources.id, resourceId))
-  if (!resource) throw new AppError("Resource not found", 404)
-  return resource
+export async function requireResource(resourceId: string, userId: string) {
+  const [row] = await db
+    .select({ resource: resources, role: workspaceMembers.role })
+    .from(resources)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, resources.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
+    .where(eq(resources.id, resourceId))
+  if (!row) throw new AppError("Resource not found", 404)
+  return { ...row.resource, role: row.role }
 }
 
 export async function getResource(c: Context<AppEnv>) {

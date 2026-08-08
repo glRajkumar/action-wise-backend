@@ -5,6 +5,7 @@ import type { zContext } from "../types/hono"
 import { runActionSteps } from "../services/execute-action"
 
 import { actionRuns, actions, actionSteps } from "../db/schema/actions"
+import { workspaceMembers } from "../db/schema/workspaces"
 import { resources } from "../db/schema/resources"
 import { runs } from "../db/schema/runs"
 import { db } from "../lib/db"
@@ -25,10 +26,17 @@ import {
 } from "../validations/actions"
 import { workspaceIdParamSchema } from "../validations/workspaces"
 
-export async function requireAction(actionId: string) {
-  const [row] = await db.select().from(actions).where(eq(actions.id, actionId))
+export async function requireAction(actionId: string, userId: string) {
+  const [row] = await db
+    .select({ action: actions, role: workspaceMembers.role })
+    .from(actions)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, actions.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
+    .where(eq(actions.id, actionId))
   if (!row) throw new AppError("Action not found", 404)
-  return row
+  return { ...row.action, role: row.role }
 }
 
 export async function listActions(c: zContext<{ param: typeof workspaceIdParamSchema }>) {

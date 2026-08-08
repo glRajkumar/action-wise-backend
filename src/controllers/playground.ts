@@ -7,6 +7,7 @@ import { executeHttpResourceRun, type HttpResourceConfig } from "../services/exe
 import { createResourceRow, type ResourceInput } from "../services/resources"
 
 import { playgroundBoards, playgroundTiles } from "../db/schema/playground"
+import { workspaceMembers } from "../db/schema/workspaces"
 import { resources } from "../db/schema/resources"
 import { runs } from "../db/schema/runs"
 import { db } from "../lib/db"
@@ -35,22 +36,30 @@ type HttpAdhocConfig = {
 }
 
 export async function requireBoard(boardId: string, userId: string) {
-  const [board] = await db
-    .select()
+  const [row] = await db
+    .select({ board: playgroundBoards, role: workspaceMembers.role })
     .from(playgroundBoards)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, playgroundBoards.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
     .where(and(eq(playgroundBoards.id, boardId), eq(playgroundBoards.userId, userId)))
-  if (!board) throw new AppError("Board not found", 404)
-  return board
+  if (!row) throw new AppError("Board not found", 404)
+  return { ...row.board, role: row.role }
 }
 
 export async function requireTile(tileId: string, userId: string) {
   const [row] = await db
-    .select({ tile: playgroundTiles, workspaceId: playgroundBoards.workspaceId })
+    .select({ tile: playgroundTiles, workspaceId: playgroundBoards.workspaceId, role: workspaceMembers.role })
     .from(playgroundTiles)
     .innerJoin(playgroundBoards, eq(playgroundTiles.boardId, playgroundBoards.id))
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, playgroundBoards.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
     .where(and(eq(playgroundTiles.id, tileId), eq(playgroundBoards.userId, userId)))
   if (!row) throw new AppError("Tile not found", 404)
-  return { ...row.tile, workspaceId: row.workspaceId }
+  return { ...row.tile, workspaceId: row.workspaceId, role: row.role }
 }
 
 export async function listBoards(c: zContext<{ param: typeof workspaceIdParamSchema }>) {

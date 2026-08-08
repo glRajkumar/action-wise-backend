@@ -171,10 +171,17 @@ export async function inviteToWorkspace(c: zContext<{ param: typeof workspaceIdP
   return c.json(invite, 201)
 }
 
-export async function requireInviteRow(inviteId: string) {
-  const [invite] = await db.select().from(workspaceInvites).where(eq(workspaceInvites.id, inviteId))
-  if (!invite) throw new AppError("Invite not found", 404)
-  return invite
+export async function requireInviteRow(inviteId: string, userId: string) {
+  const [row] = await db
+    .select({ invite: workspaceInvites, role: workspaceMembers.role })
+    .from(workspaceInvites)
+    .innerJoin(
+      workspaceMembers,
+      and(eq(workspaceMembers.workspaceId, workspaceInvites.workspaceId), eq(workspaceMembers.userId, userId)),
+    )
+    .where(eq(workspaceInvites.id, inviteId))
+  if (!row) throw new AppError("Invite not found", 404)
+  return { ...row.invite, role: row.role }
 }
 
 export async function revokeInvite(c: zContext<{ param: typeof inviteParamSchema }>) {
