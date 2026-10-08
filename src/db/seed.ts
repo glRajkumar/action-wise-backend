@@ -265,6 +265,41 @@ async function main() {
     executedAt: new Date(now - 5 * dayMs),
   });
 
+  await db.insert(runs).values({
+    workspaceId: workspace.id,
+    resourceId: deletePost.id,
+    triggeredBy: user.id,
+    request: httpRunRequest("DELETE", "/posts/1"),
+    response: { status: 200, headers: JSON_HEADERS, body: {} },
+    status: "success",
+    durationMs: 110,
+    executedAt: new Date(now - 4 * dayMs),
+  });
+
+  function sampleCustomer(index: number) {
+    return {
+      id: `cust_${100 + index}`,
+      fullName: ["Grace Hopper", "Ada Lovelace", "Alan Turing"][index % 3],
+      email: `customer${index + 1}@example.com`,
+      tier: ["free", "pro", "pro"][index % 3],
+      lifetimeValue: 120.5 + index * 40,
+      signedUpAt: new Date(Date.UTC(2026, 1, 3 + index)).toISOString(),
+    };
+  }
+
+  for (let i = 0; i < 2; i++) {
+    await db.insert(runs).values({
+      workspaceId: workspace.id,
+      resourceId: firestoreCustomers.id,
+      triggeredBy: user.id,
+      request: { kind: "firebase_firestore", mode: "read_once", path: "customers" },
+      response: [sampleCustomer(i), sampleCustomer(i + 1), sampleCustomer(i + 2)],
+      status: "success",
+      durationMs: 60 + i * 15,
+      executedAt: new Date(now - (2 - i) * dayMs),
+    });
+  }
+
   const [board] = await db
     .insert(playgroundBoards)
     .values({ workspaceId: workspace.id, userId: user.id, name: "Demo Board" })
@@ -301,7 +336,7 @@ async function main() {
     {
       boardId: board.id,
       resourceId: listUsers.id,
-      layout: { x: 0, y: 3, w: 2, h: 2 },
+      layout: { x: 0, y: 3, w: 3, h: 2 },
       renderMode: "big_number",
       position: 3,
     },
@@ -409,11 +444,116 @@ async function main() {
     },
   ]);
 
+  const [scratchBoard] = await db
+    .insert(playgroundBoards)
+    .values({ workspaceId: workspace.id, userId: user.id, name: "Scratch Board" })
+    .returning();
+  if (!scratchBoard) throw new Error("Failed to insert scratch board");
+
+  await db.insert(playgroundTiles).values([
+    {
+      boardId: scratchBoard.id,
+      adhocConfig: {
+        kind: "http",
+        connectionId: httpConnection.id,
+        address: "/comments",
+        config: { method: "GET", bodyType: "none", queryParams: { postId: "1" } },
+      },
+      layout: { x: 0, y: 0, w: 4, h: 3 },
+      renderMode: "table",
+      position: 0,
+    },
+    {
+      boardId: scratchBoard.id,
+      adhocConfig: {
+        kind: "firebase_firestore",
+        connectionId: firebaseConnection.id,
+        address: "customers",
+        config: { mode: "read_once" },
+      },
+      layout: { x: 4, y: 0, w: 4, h: 3 },
+      renderMode: "json_tree",
+      position: 1,
+    },
+  ]);
+
+  const [secondAction] = await db
+    .insert(actions)
+    .values({
+      workspaceId: workspace.id,
+      name: "Fetch and delete post",
+      description: "Fetches post 1, then deletes it.",
+      createdBy: user.id,
+    })
+    .returning();
+  if (!secondAction) throw new Error("Failed to insert second action");
+
+  const [secondStep1] = await db
+    .insert(actionSteps)
+    .values({
+      actionId: secondAction.id,
+      resourceId: getPost.id,
+      order: 0,
+      name: "fetch_post",
+      inputMapping: { postId: "1" },
+    })
+    .returning();
+  const [secondStep2] = await db
+    .insert(actionSteps)
+    .values({ actionId: secondAction.id, resourceId: deletePost.id, order: 1, name: "delete_post" })
+    .returning();
+  if (!secondStep1 || !secondStep2) throw new Error("Failed to insert second action's steps");
+
+  const secondRunStartedAt = new Date(now - 3 * dayMs);
+  const [secondActionRun] = await db
+    .insert(actionRuns)
+    .values({
+      actionId: secondAction.id,
+      workspaceId: workspace.id,
+      status: "success",
+      triggeredBy: user.id,
+      startedAt: secondRunStartedAt,
+      finishedAt: new Date(secondRunStartedAt.getTime() + 900),
+    })
+    .returning();
+  if (!secondActionRun) throw new Error("Failed to insert second action run");
+
+  await db.insert(runs).values([
+    {
+      workspaceId: workspace.id,
+      resourceId: getPost.id,
+      stepId: secondStep1.id,
+      actionRunId: secondActionRun.id,
+      triggeredBy: user.id,
+      request: httpRunRequest("GET", "/posts/1"),
+      response: {
+        status: 200,
+        headers: JSON_HEADERS,
+        body: { userId: 1, id: 1, title: "sunt aut facere", body: "quia et suscipit" },
+      },
+      status: "success",
+      durationMs: 100,
+      executedAt: secondRunStartedAt,
+    },
+    {
+      workspaceId: workspace.id,
+      resourceId: deletePost.id,
+      stepId: secondStep2.id,
+      actionRunId: secondActionRun.id,
+      triggeredBy: user.id,
+      request: httpRunRequest("DELETE", "/posts/1"),
+      response: { status: 200, headers: JSON_HEADERS, body: {} },
+      status: "success",
+      durationMs: 105,
+      executedAt: new Date(secondRunStartedAt.getTime() + 600),
+    },
+  ]);
+
   console.log(`Seed complete for ${user.email}:`);
   console.log(`  workspace "${DEMO_WORKSPACE_NAME}" (${workspace.id})`);
-  console.log("  2 connections, 3 folders, 6 resources, 13 runs");
-  console.log('  1 playground board ("Demo Board", 4 tiles)');
-  console.log('  1 action ("Create post and verify", 3 steps, 1 completed run)');
+  console.log("  2 connections, 3 folders, 6 resources, 20 runs");
+  console.log('  2 playground boards ("Demo Board" 4 tiles, "Scratch Board" 2 tiles)');
+  console.log('  2 actions ("Create post and verify" 3 steps, "Fetch and delete post" 2 steps)');
 }
 
 main().catch((error) => {

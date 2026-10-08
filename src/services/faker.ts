@@ -68,5 +68,6 @@ function fakeValueForType(fieldName: string, type: InferredType): unknown {
 }
 
 export function generateFakeRecords(inferred: InferredType, count: number): unknown[] {
-  return Array.from({ length: count }, () => fakeValueForType("root", inferred));
+  const recordType = inferred.arrayElement ?? inferred;
+  return Array.from({ length: count }, () => fakeValueForType("root", recordType));
 }
